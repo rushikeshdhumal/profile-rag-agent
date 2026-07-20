@@ -1,0 +1,19 @@
+{
+  "display_name": "Ada Example",
+  "headline": "ML engineer · RAG systems · open to relocate",
+  "linkedin_url": "https://linkedin.com/in/ada-example",
+  "linkedin_text": "About: I build reliable LLM products with retrieval and evals.\n\nExperience: Senior ML Engineer at Northwind Labs.",
+  "github_username": "",
+  "scholar_url": "",
+  "scholar_text": "Example Paper — NeurIPS Workshop — 2024",
+  "blog_text": "## Why grounded chat matters\nRecruiters need facts, not hallucinations.",
+  "faq": {
+    "open_to_relocate": "Yes — US and Canada",
+    "work_authorization": "Authorized to work in the US",
+    "preferred_roles": "ML Engineer, Applied Scientist, AI Platform",
+    "preferred_locations": "Remote, NYC, Toronto",
+    "notice_period": "2 weeks",
+    "compensation_notes": "",
+    "other": "Happy to share a portfolio walkthrough."
+  }
+}

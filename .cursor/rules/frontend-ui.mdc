@@ -1,0 +1,29 @@
+---
+description: Frontend builder/chat UI conventions
+globs: frontend/**/*.{tsx,ts,css,html}
+alwaysApply: false
+---
+
+# Frontend conventions
+
+## Pages
+
+- `BuilderPage` — owner gate + accordion form (Profile / Sources / FAQ)
+- `ChatPage` — `/a/:agentId` recruiter chat with starter chips
+
+## Accordion
+
+- Track open state per section independently (`Record<Section, boolean>`)
+- **Always keep field panels in the DOM**; toggle with `hidden={!open}` — never `{open && <inputs/>}` (unmount clears values and file inputs)
+
+## Chat UX
+
+- Keep message `<input>` enabled while `busy` (only disable Send / guard `ask()`)
+- `inputRef.focus()` after send completes and when agent loads
+- Dark minimal theme: `#0b0d10` bg, `#eceff3` text, `#7eb6ff` accent; Manrope + Newsreader
+- Respect `prefers-reduced-motion`; visible `:focus-visible` rings
+
+## API client
+
+- Owner mutations: `X-Owner-Secret` from `sessionStorage` (`api.ts`)
+- After UI changes that matter in Docker: `npm run build` in `frontend/` then `docker compose up --build`

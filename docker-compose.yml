@@ -1,0 +1,17 @@
+services:
+  app:
+    build: .
+    ports:
+      - "7860:7860"
+    # Load secrets from .env as literal values. Do not re-map OWNER_SECRET via
+    # ${OWNER_SECRET} here — Compose interpolates $VAR and breaks secrets that
+    # contain `$` (e.g. ...Q$ND becomes ...Q + empty $ND).
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /data
+      STATIC_DIR: /app/frontend/dist
+    volumes:
+      - ./data:/data
+      - ./backend:/app/backend
+    restart: unless-stopped

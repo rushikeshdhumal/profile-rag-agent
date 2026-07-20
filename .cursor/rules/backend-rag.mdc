@@ -1,0 +1,37 @@
+---
+description: Backend RAG, ingest, and API conventions
+globs: backend/**/*.py
+alwaysApply: false
+---
+
+# Backend conventions
+
+## Layout
+
+- `config.py` — pydantic-settings; loads repo-root `.env`
+- `pdf_extract.py` — PDF text extraction + cleanup
+- `github_fetch.py` — `fetch_github_documents()` returns multiple `(filename, text)` docs (identity, repos, readme, top-5 repo READMEs); partial-failure tolerant
+- `ingest.py` — corpus build + markdown-aware chunking (`CHUNK_SIZE=500`); `source_type` metadata
+- `vectorstore.py` — Chroma per agent; `MAX_DISTANCE≈0.88`; prefix/type fetch helpers
+- `rag.py` — logistics / experience / github query boosts; ~6k context budget
+- `llm.py` — OpenAI-compatible chat; 429 backoff
+- `auth.py` — `require_owner`; compare secrets safely (equal-length before `compare_digest`)
+- `routes/agents.py`, `routes/chat.py`
+
+## Ingest rules
+
+- PDF → extract → write `resume_extracted.md` → index that (not only binary PDF)
+- GitHub: never one mega-file; cap profile README ~4k, repo README ~2k
+- FAQ → one file per answer (`faq_*.md`)
+- Raise `ValueError` for unusable resumes → API 400
+
+## Retrieval rules
+
+- Experience/work/resume queries: inject `resume_*` / `source_type=resume` / linkedin chunks
+- Logistics: inject identity + FAQ
+- GitHub/project queries: prefer `github_*` (unless experience query)
+- System prompt: answer only from context; cite project names from context only
+
+## When changing embeddings or chunking
+
+Tell the user to **recreate or reindex** existing agents; old Chroma collections will be stale.
