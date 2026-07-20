@@ -1,14 +1,3 @@
----
-title: Profile RAG Agent
-emoji: 💬
-colorFrom: green
-colorTo: gray
-sdk: docker
-app_port: 7860
-pinned: false
-license: mit
----
-
 # Profile RAG Agent
 
 **Open-source RAG system for conversational profile discovery.**
@@ -113,10 +102,11 @@ Vite proxies `/api` to port 7860.
 
 ## Deploy (Hugging Face Spaces)
 
-1. Create a **Docker** Space and push this repo (or connect GitHub).
-2. **Secrets:** `LLM_API_KEY`, `OWNER_SECRET`; optional `GITHUB_TOKEN`, `LLM_*` overrides.
-3. **Variables:** `PUBLIC_CHAT_ONLY=true`, plus `LLM_PROVIDER` / `LLM_MODEL` as needed.
-4. Unlock the builder with `OWNER_SECRET`, create an agent, share the chat URL.
+1. Create a **Docker** Space (app port **7860**) and push this repo (or connect GitHub).
+2. If the Space needs README YAML config, prepend the keys from [`hf_space_metadata.yml`](hf_space_metadata.yml) as a `---` frontmatter block on the Space copy of `README.md` only — keep this GitHub README free of that block so it does not render as a metadata table.
+3. **Secrets:** `LLM_API_KEY`, `OWNER_SECRET`; optional `GITHUB_TOKEN`, `LLM_*` overrides.
+4. **Variables:** `PUBLIC_CHAT_ONLY=true`, plus `LLM_PROVIDER` / `LLM_MODEL` as needed.
+5. Unlock the builder with `OWNER_SECRET`, create an agent, share the chat URL.
 
 Custom domain: Cloudflare CNAME → [HF Spaces custom domains](https://huggingface.co/docs/hub/spaces-config-reference). Free Spaces may cold-start (~30–60s after idle).
 
