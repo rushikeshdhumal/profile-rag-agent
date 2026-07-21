@@ -104,67 +104,32 @@ Vite proxies `/api` to port 7860.
 
 Recommended free public host: an [Oracle Cloud Always Free](https://www.oracle.com/cloud/free/) Ubuntu VM plus a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/) for HTTPS. The tunnel reaches `localhost:7860` — **do not** open ingress port 7860 on the Oracle security list.
 
+**Full walkthrough:** [docs/ORACLE_DEPLOY.md](docs/ORACLE_DEPLOY.md)
+
 ```text
 Recruiter → HTTPS (Cloudflare) → Tunnel → VM → Docker app :7860 → ./data
 ```
 
-### 1. Create the VM
-
-1. In Oracle Cloud, create an Always Free **Ubuntu** instance (ARM Ampere if available; x86 also fine).
-2. Attach your SSH public key; note the public IP for SSH only.
-3. Ensure the VM can reach the internet outbound (pull Docker images, call NIM/Groq).
-
-### 2. Install Docker and clone
+### Quick path
 
 ```bash
 ssh ubuntu@<VM_PUBLIC_IP>
-git clone https://github.com/<you>/profile-rag-agent.git
+git clone -b deploy/oracle https://github.com/<you>/profile-rag-agent.git
 cd profile-rag-agent
-bash scripts/oracle-bootstrap.sh   # installs Docker if needed; copies .env.example on first run
-```
-
-### 3. Configure `.env` on the VM
-
-```bash
-nano .env   # or vim
-```
-
-Set at least:
-
-- `LLM_API_KEY` (and provider/model if not using the NVIDIA defaults)
-- `OWNER_SECRET` — strong random string; if it contains `$`, write each `$` as `$$` (Compose interpolation)
-- `PUBLIC_CHAT_ONLY=true` (also forced by [`docker-compose.prod.yml`](docker-compose.prod.yml))
-
-Then start (or re-run the bootstrap script):
-
-```bash
+bash scripts/oracle-bootstrap.sh   # first run creates .env — edit it, then re-run
+# Set LLM_API_KEY, OWNER_SECRET (escape $ as $$), PUBLIC_CHAT_ONLY=true
 bash scripts/oracle-bootstrap.sh
-# equivalent:
-# docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
-```
-
-Production compose uses the image build only (no `./backend` bind-mount). Local `docker compose up` still mounts backend via [`docker-compose.override.yml`](docker-compose.override.yml).
-
-Health check on the VM:
-
-```bash
 curl -s http://127.0.0.1:7860/api/health
 ```
 
-### 4. Cloudflare Tunnel (public HTTPS)
+Then install a Cloudflare named tunnel routing a hostname to `http://localhost:7860` (see the full guide). Unlock the builder, create an agent, share `/a/<agent_id>`.
 
-1. Create a Cloudflare account; add a site or use a `*.trycloudflare.com` quick tunnel for a trial.
-2. On the VM, install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/).
-3. Create a **named tunnel** and a public hostname that routes to `http://localhost:7860`.
-4. Install the tunnel as a service with your token (`cloudflared service install <TOKEN>`). **Never commit the token.**
-
-After the tunnel is up, open the Cloudflare hostname, unlock the builder with `OWNER_SECRET`, create an agent, and share `https://<your-host>/a/<agent_id>`.
-
-### 5. Updates and troubleshooting
+### Updates and troubleshooting
 
 - After UI or Dockerfile changes: `git pull` then `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
 - After PDF/chunk/GitHub pipeline changes: recreate the agent or `POST /api/agents/{id}/reindex` with the owner header
 - `Invalid or missing owner secret`: escape `$` as `$$` in `.env`, recreate containers, unlock with the literal secret (one `$`)
+- See [docs/ORACLE_DEPLOY.md](docs/ORACLE_DEPLOY.md) for Cloudflare install, checklist, and a fuller troubleshooting table
 
 ## Ingestion sources
 
