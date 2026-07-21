@@ -5,13 +5,13 @@ alwaysApply: true
 
 # Profile RAG Agent (custom-gpt)
 
-Open-source RAG system for conversational profile discovery. Self-host / HF Spaces. Candidates upload resume + paste LinkedIn/FAQ/etc., bring their own free LLM API key (NVIDIA NIM default), deploy once, share a public chat URL with recruiters. Recruiters never install anything.
+Open-source RAG system for conversational profile discovery. Self-host on Docker / Oracle Always Free + Cloudflare Tunnel. Candidates upload resume + paste LinkedIn/FAQ/etc., bring their own free LLM API key (NVIDIA NIM default), deploy once, share a public chat URL with recruiters. Recruiters never install anything.
 
 ## Stack
 
 - **Backend:** FastAPI in `backend/app/` — ingest, FastEmbed + Chroma, grounded chat
 - **Frontend:** React + Vite in `frontend/` — builder + `/a/:agentId` chat
-- **Deploy:** single `Dockerfile` (API serves `frontend/dist`); `docker-compose.yml` for local
+- **Deploy:** single `Dockerfile` (API serves `frontend/dist`); local `docker compose up`; public VM uses `docker-compose.prod.yml` + Cloudflare Tunnel
 - **Data:** `data/agents/{id}/{meta.json,sources/,chroma/}` on disk (no paid DB)
 - **Embeddings:** local FastEmbed ONNX (`sentence-transformers/all-MiniLM-L6-v2` via config) — not Torch
 - **LLM:** OpenAI-compatible client → NVIDIA / Groq / Ollama (`LLM_*` env)
@@ -19,7 +19,7 @@ Open-source RAG system for conversational profile discovery. Self-host / HF Spac
 ## Access model
 
 - `OWNER_SECRET` gates create/reindex (`X-Owner-Secret` header)
-- `PUBLIC_CHAT_ONLY=true` on Spaces (chat public; builder owner-only)
+- `PUBLIC_CHAT_ONLY=true` on public deploys (chat public; builder owner-only)
 - Chat is grounded: refuse unknowns; never invent employers/skills
 
 ## Critical gotchas (do not regress)
@@ -30,8 +30,9 @@ Open-source RAG system for conversational profile discovery. Self-host / HF Spac
 4. **Chroma telemetry:** pin `posthog>=2.4.0,<6.0.0`; `Settings(anonymized_telemetry=False)`; silence `chromadb.telemetry.product.posthog`.
 5. **PDF resumes:** extract with PyMuPDF → pypdf fallback (`pdf_extract.py`); save/index `resume_extracted.md`. Empty/weak PDF text should error clearly. After PDF/RAG changes, agents need **recreate or reindex**.
 6. **Retrieval:** experience queries must boost resume/linkedin; distance cutoff ~0.88 (0.75 was too aggressive and dropped resume hits). GitHub is split into multiple docs with truncation — do not re-merge into one giant blob.
-7. **Frontend in Docker:** Compose mounts `backend/` only; rebuild image (`docker compose up --build`) after UI changes so `frontend/dist` updates.
-8. **Secrets:** never commit `.env`. Rotate keys if exposed. Prefer not echoing live secrets in logs/chat.
+7. **Frontend in Docker:** Local override mounts `backend/` only; prod uses image code. Rebuild image (`docker compose up --build`, or prod `-f` pair) after UI changes so `frontend/dist` updates.
+8. **Secrets:** never commit `.env` or Cloudflare tunnel tokens. Rotate keys if exposed. Prefer not echoing live secrets in logs/chat.
+9. **Oracle public access:** prefer Cloudflare Tunnel to `localhost:7860`; do not open ingress 7860 when using a tunnel. Use `docker-compose.prod.yml` (`PUBLIC_CHAT_ONLY=true`).
 
 ## Local run
 
