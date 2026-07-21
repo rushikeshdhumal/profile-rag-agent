@@ -4,7 +4,7 @@ Cross-session notes for coding agents working in this repo.
 
 ## What this is
 
-**Profile RAG Agent** — open-source RAG system for conversational profile discovery. Self-hosted / Hugging Face Spaces. Candidate configures profile sources + own LLM API key; recruiters open a public chat link.
+**Profile RAG Agent** — open-source RAG system for conversational profile discovery. Self-hosted (Docker / Oracle Always Free + Cloudflare Tunnel). Candidate configures profile sources + own LLM API key; recruiters open a public chat link.
 
 ## Quick map
 
@@ -12,8 +12,11 @@ Cross-session notes for coding agents working in this repo.
 |------|------|
 | `backend/app/` | FastAPI RAG API |
 | `frontend/src/` | Builder + chat UI |
-| `Dockerfile` | Production/Spaces image |
-| `docker-compose.yml` | Local run (`backend` bind-mounted; UI from image dist) |
+| `Dockerfile` | Production image |
+| `docker-compose.yml` | Base Compose (`./data` volume) |
+| `docker-compose.override.yml` | Local only: bind-mounts `./backend` |
+| `docker-compose.prod.yml` | Oracle/public: `PUBLIC_CHAT_ONLY`, no backend mount |
+| `scripts/oracle-bootstrap.sh` | VM Docker install + prod `up --build` |
 | `examples/sample-profile/` | Smoke-test corpus |
 | `.env` | Secrets (gitignored); escape `$` as `$$` for Compose |
 
