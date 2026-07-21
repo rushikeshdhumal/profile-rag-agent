@@ -2,7 +2,7 @@
 
 **Open-source RAG system for conversational profile discovery.**
 
-Candidates ingest a resume, pasted LinkedIn/FAQ text, GitHub, and notes into a grounded retrieval pipeline, deploy once (locally or on Hugging Face Spaces), and share a public chat URL with recruiters. Recruiters never install anything. Answers stay tied to uploaded sources — unknowns are refused, not invented.
+Candidates ingest a resume, pasted LinkedIn/FAQ text, GitHub, and notes into a grounded retrieval pipeline, deploy once (local Docker or a free VM), and share a public chat URL with recruiters. Recruiters never install anything. Answers stay tied to uploaded sources — unknowns are refused, not invented.
 
 ## Features
 
@@ -11,7 +11,7 @@ Candidates ingest a resume, pasted LinkedIn/FAQ text, GitHub, and notes into a g
 - **Local embeddings** — FastEmbed ONNX (`all-MiniLM-L6-v2`); no GPU or PyTorch required
 - **BYO LLM** — OpenAI-compatible clients for NVIDIA NIM, Groq, or Ollama
 - **Owner-gated builder** — `OWNER_SECRET` protects create/reindex; public chat is shareable
-- **Free deploy path** — single Docker image for local Compose or Hugging Face Spaces
+- **Self-host deploy** — single Docker image; Oracle Always Free + Cloudflare Tunnel recommended for a public HTTPS URL
 
 ## Stack
 
@@ -22,7 +22,7 @@ Candidates ingest a resume, pasted LinkedIn/FAQ text, GitHub, and notes into a g
 | Embeddings | FastEmbed (ONNX) |
 | Vector store | Chroma on disk |
 | LLM | OpenAI-compatible HTTP API |
-| Deploy | Docker / Docker Compose / HF Spaces |
+| Deploy | Docker Compose (local) / Oracle Always Free + Cloudflare Tunnel |
 
 ## System architecture
 
@@ -100,15 +100,75 @@ npm run dev
 
 Vite proxies `/api` to port 7860.
 
-## Deploy (Hugging Face Spaces)
+## Deploy on Oracle Always Free
 
-1. Create a **Docker** Space (app port **7860**) and push this repo (or connect GitHub).
-2. If the Space needs README YAML config, prepend the keys from [`hf_space_metadata.yml`](hf_space_metadata.yml) as a `---` frontmatter block on the Space copy of `README.md` only — keep this GitHub README free of that block so it does not render as a metadata table.
-3. **Secrets:** `LLM_API_KEY`, `OWNER_SECRET`; optional `GITHUB_TOKEN`, `LLM_*` overrides.
-4. **Variables:** `PUBLIC_CHAT_ONLY=true`, plus `LLM_PROVIDER` / `LLM_MODEL` as needed.
-5. Unlock the builder with `OWNER_SECRET`, create an agent, share the chat URL.
+Recommended free public host: an [Oracle Cloud Always Free](https://www.oracle.com/cloud/free/) Ubuntu VM plus a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/) for HTTPS. The tunnel reaches `localhost:7860` — **do not** open ingress port 7860 on the Oracle security list.
 
-Custom domain: Cloudflare CNAME → [HF Spaces custom domains](https://huggingface.co/docs/hub/spaces-config-reference). Free Spaces may cold-start (~30–60s after idle).
+```text
+Recruiter → HTTPS (Cloudflare) → Tunnel → VM → Docker app :7860 → ./data
+```
+
+### 1. Create the VM
+
+1. In Oracle Cloud, create an Always Free **Ubuntu** instance (ARM Ampere if available; x86 also fine).
+2. Attach your SSH public key; note the public IP for SSH only.
+3. Ensure the VM can reach the internet outbound (pull Docker images, call NIM/Groq).
+
+### 2. Install Docker and clone
+
+```bash
+ssh ubuntu@<VM_PUBLIC_IP>
+git clone https://github.com/<you>/profile-rag-agent.git
+cd profile-rag-agent
+bash scripts/oracle-bootstrap.sh   # installs Docker if needed; copies .env.example on first run
+```
+
+### 3. Configure `.env` on the VM
+
+```bash
+nano .env   # or vim
+```
+
+Set at least:
+
+- `LLM_API_KEY` (and provider/model if not using the NVIDIA defaults)
+- `OWNER_SECRET` — strong random string; if it contains `$`, write each `$` as `$$` (Compose interpolation)
+- `PUBLIC_CHAT_ONLY=true` (also forced by [`docker-compose.prod.yml`](docker-compose.prod.yml))
+
+Then start (or re-run the bootstrap script):
+
+```bash
+bash scripts/oracle-bootstrap.sh
+# equivalent:
+# docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Production compose uses the image build only (no `./backend` bind-mount). Local `docker compose up` still mounts backend via [`docker-compose.override.yml`](docker-compose.override.yml).
+
+Health check on the VM:
+
+```bash
+curl -s http://127.0.0.1:7860/api/health
+```
+
+### 4. Cloudflare Tunnel (public HTTPS)
+
+1. Create a Cloudflare account; add a site or use a `*.trycloudflare.com` quick tunnel for a trial.
+2. On the VM, install [`cloudflared`](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/).
+3. Create a **named tunnel** and a public hostname that routes to `http://localhost:7860`.
+4. Install the tunnel as a service with your token (`cloudflared service install <TOKEN>`). **Never commit the token.**
+
+After the tunnel is up, open the Cloudflare hostname, unlock the builder with `OWNER_SECRET`, create an agent, and share `https://<your-host>/a/<agent_id>`.
+
+### 5. Updates and troubleshooting
+
+- After UI or Dockerfile changes: `git pull` then `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
+- After PDF/chunk/GitHub pipeline changes: recreate the agent or `POST /api/agents/{id}/reindex` with the owner header
+- `Invalid or missing owner secret`: escape `$` as `$$` in `.env`, recreate containers, unlock with the literal secret (one `$`)
+
+### Hugging Face Spaces (paid Docker)
+
+HF **Docker** / **Gradio** Spaces generally require a paid plan; **Static** Spaces cannot run this API. If you still use a Docker Space: app port **7860**, secrets `LLM_API_KEY` / `OWNER_SECRET`, variable `PUBLIC_CHAT_ONLY=true`. Optional Space-only README frontmatter: [`hf_space_metadata.yml`](hf_space_metadata.yml) (keep it out of the GitHub README so it does not render as a metadata table).
 
 ## Ingestion sources
 
@@ -162,8 +222,10 @@ LLM_MODEL=llama3.1
 
 ## Security
 
-- Never commit `.env` or put `LLM_API_KEY` in the frontend.
-- Mutating routes require `X-Owner-Secret` when `OWNER_SECRET` is set.
+- Never commit `.env`, Cloudflare tunnel tokens, or put `LLM_API_KEY` in the frontend.
+- On public VMs set `PUBLIC_CHAT_ONLY=true` (prod Compose sets this) so only owners with `OWNER_SECRET` can create/reindex.
+- Mutating routes require `X-Owner-Secret` when `OWNER_SECRET` is set. Use a strong secret; escape `$` as `$$` in Compose `.env` files.
+- Prefer Cloudflare Tunnel over exposing `0.0.0.0:7860` on the public internet (no ingress port needed).
 - Free NIM tiers are rate-limited; fine for personal recruiting traffic, not a public viral bot.
 
 ## Contributing

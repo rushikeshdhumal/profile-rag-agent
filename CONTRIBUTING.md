@@ -58,7 +58,8 @@ Vite proxies `/api` to the API on port 7860.
 | `backend/app/` | FastAPI: ingest, embeddings, Chroma, RAG chat |
 | `frontend/src/` | Builder UI + public chat (`/a/:agentId`) |
 | `examples/sample-profile/` | Smoke-test corpus |
-| `Dockerfile` | Production / Spaces image |
+| `Dockerfile` | Production image |
+| `docker-compose.prod.yml` | Public VM / Oracle (`PUBLIC_CHAT_ONLY`, no backend mount) |
 | `docker-compose.yml` | Local run |
 
 Agent data lives under `data/agents/{id}/` (`meta.json`, `sources/`, `chroma/`). Do not commit secrets or personal agent data.
