@@ -166,10 +166,6 @@ After the tunnel is up, open the Cloudflare hostname, unlock the builder with `O
 - After PDF/chunk/GitHub pipeline changes: recreate the agent or `POST /api/agents/{id}/reindex` with the owner header
 - `Invalid or missing owner secret`: escape `$` as `$$` in `.env`, recreate containers, unlock with the literal secret (one `$`)
 
-### Hugging Face Spaces (paid Docker)
-
-HF **Docker** / **Gradio** Spaces generally require a paid plan; **Static** Spaces cannot run this API. If you still use a Docker Space: app port **7860**, secrets `LLM_API_KEY` / `OWNER_SECRET`, variable `PUBLIC_CHAT_ONLY=true`. Optional Space-only README frontmatter: [`hf_space_metadata.yml`](hf_space_metadata.yml) (keep it out of the GitHub README so it does not render as a metadata table).
-
 ## Ingestion sources
 
 | Source | How |
