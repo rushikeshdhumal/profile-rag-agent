@@ -1,4 +1,4 @@
-# Multi-stage image for local Compose and Hugging Face Spaces
+# Multi-stage image for local Compose and Oracle / production VMs
 FROM node:22-bookworm-slim AS frontend-build
 WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json* ./
