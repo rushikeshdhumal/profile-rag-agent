@@ -35,7 +35,94 @@ Related files:
 
 ---
 
-## 1. Create the Oracle Always Free VM
+## Glossary (Oracle Cloud terms used below)
+
+| Term | Plain-English meaning |
+|------|------------------------|
+| **VCN** (Virtual Cloud Network) | Your own private network inside Oracle Cloud — like a virtual data center. Everything else (subnets, VMs, gateways) lives inside a VCN. |
+| **CIDR block** | A notation for an IP address range, e.g. `10.0.0.0/16` means "all addresses from `10.0.0.0` to `10.0.255.255"`. The `/16` is the size of the range. |
+| **Subnet** | A smaller slice of the VCN's IP range where you actually place VMs, e.g. `10.0.0.0/24` inside a `10.0.0.0/16` VCN. |
+| **Regional vs Availability Domain (AD)-specific subnet** | A *regional* subnet spans all ADs in the region, so a VM in any AD can use it. An *AD-specific* subnet is tied to one AD only. Regional is simpler and is the current default. |
+| **Availability Domain (AD)** | A physically separate data center within an Oracle region. A region typically has 3 ADs (AD-1, AD-2, AD-3) for redundancy. |
+| **Fault Domain** | A further subdivision *within* an AD, isolating hardware failures. You generally don't need to pick one manually. |
+| **Internet Gateway (IGW)** | The component that lets a VCN/subnet reach and be reached from the public internet. A "public" subnet routes traffic through one. |
+| **NAT Gateway** | Lets a *private* subnet reach the internet *outbound only* (no inbound), without giving VMs public IPs. Not needed here since we use a public subnet. |
+| **Route table** | The set of rules that decide where network traffic goes (e.g. "send anything not on my private network to the Internet Gateway"). |
+| **Security list / NSG (Network Security Group)** | Cloud-level firewall rules (allowed inbound/outbound ports and source IPs), separate from the OS firewall. |
+| **DNS hostnames / DNS label** | Lets Oracle auto-generate internal DNS names for your instances (e.g. `myvm.profilerag.oraclevcn.com`). Not related to your public Cloudflare domain. |
+| **Boot volume** | The virtual disk that holds the VM's operating system, similar to a laptop's internal SSD. |
+| **Shape** | Oracle's term for a VM "size" (CPU architecture + CPU count + RAM), e.g. `VM.Standard.A1.Flex` (ARM, flexible CPU/RAM) or `VM.Standard.E2.1.Micro` (small x86). |
+| **OCPU** | Oracle's unit of CPU allocation, roughly one full physical CPU core (with hyper-threading counted as 2 vCPUs on some shapes). |
+| **Confidential computing** | Encrypts VM memory so even the cloud provider can't read it while running. Useful for highly regulated workloads — not needed for a personal RAG chatbot. |
+| **Compartment** | An Oracle Cloud folder-like construct for organizing and permissioning resources. The default compartment is fine for a single personal project. |
+
+---
+
+## 1. Create the network (VCN + subnet)
+
+If you already have a VCN with a public subnet, skip to [Section 2](#2-create-the-oracle-always-free-vm). Otherwise, create both first — Compute instances need a subnet to attach to.
+
+### 1a. Create the VCN
+
+**Networking → Virtual Cloud Networks → Create VCN.**
+
+| Setting | Value | Why |
+|--------|-------|-----|
+| Name | `profile-rag-vcn` | Just a label |
+| IPv4 CIDR Blocks | `10.0.0.0/16` | Standard private range; plenty of address space for one VM |
+| Use DNS hostnames in this VCN | **On** | Lets instances get auto-generated internal DNS names (harmless, sometimes required by other services) |
+| DNS Label | leave auto-suggested (e.g. `profilerag`) | Required once DNS hostnames is on; only affects internal `*.oraclevcn.com` names, not your public URL |
+| DNS Domain Name | leave auto | Don't customize |
+| IPv6 Prefixes / Assign Oracle allocated IPv6 /56 | **Off** | Not needed; this deploy is IPv4-only |
+| BYOIPv6 Prefix / ULA Prefixes | leave empty | Not needed |
+| Tags / Security Attributes | leave empty | Optional metadata, not needed for a personal project |
+
+Click **Create VCN**.
+
+### 1b. Create a public subnet
+
+Inside the new VCN: **Subnets → Create Subnet.**
+
+| Setting | Value | Why |
+|--------|-------|-----|
+| Name | `public-subnet` | Clear label |
+| Subnet Type | **Regional** | Simpler; any AD can use it (current Oracle default) |
+| IPv4 CIDR Block | `10.0.0.0/24` | A slice of the VCN's `10.0.0.0/16`; enough for one VM |
+| IPv6 Prefixes | leave at `0` | Not needed |
+| Route Table | **Default Route Table for &lt;vcn&gt;** | Must route `0.0.0.0/0` to an Internet Gateway for public access (see below) |
+| Subnet Access | **Public Subnet** | Gives the VM a public IP for SSH and lets it reach the internet for Docker pulls / LLM API calls |
+| Use DNS hostnames in this Subnet | **On** | Matches the VCN setting |
+| DNS Label | leave auto | Only affects internal DNS names |
+| DNS Domain Name | leave auto | Don't customize |
+| DHCP Options | **Default DHCP Options** | Standard IP assignment settings; no changes needed |
+| Security Lists | **Default Security List for &lt;vcn&gt;** | You'll add an SSH rule here (or confirm it's already present) |
+| Resource logging | **Off** | Extra logging/cost not needed for a personal project |
+
+Click **Create Subnet**.
+
+### 1c. Add an Internet Gateway (if the wizard didn't already)
+
+If Oracle's "Create VCN" wizard offered a one-click "VCN with Internet Connectivity" option, this is already done. Otherwise, manually add it:
+
+1. **Networking → Virtual Cloud Networks → &lt;your VCN&gt; → Internet Gateways → Create Internet Gateway.** Name it `igw` and create it.
+2. **Route Tables → Default Route Table → Add Route Rule:**
+   - Destination CIDR: `0.0.0.0/0` (meaning "anywhere on the internet")
+   - Target type: **Internet Gateway**
+   - Target: the gateway you just created
+
+### 1d. Confirm the security list allows SSH
+
+**Security Lists → Default Security List → Ingress Rules** should include (or you should add):
+
+| Source CIDR | IP Protocol | Destination Port Range |
+|-------------|-------------|--------------------------|
+| `0.0.0.0/0` (or your IP `/32` for tighter security) | TCP | `22` |
+
+**Do not** add a rule for port `7860` — the app stays reachable only via the Cloudflare Tunnel, not directly from the internet.
+
+---
+
+## 2. Create the Oracle Always Free VM
 
 1. Sign up / sign in at [Oracle Cloud Free Tier](https://www.oracle.com/cloud/free/).
 2. Open **Compute → Instances → Create instance**.
@@ -43,18 +130,33 @@ Related files:
 
    - **Name:** e.g. `profile-rag-agent`
    - **Image:** Canonical Ubuntu 22.04 or 24.04
-   - **Shape:** Always Free eligible — prefer **VM.Standard.A1.Flex** (Ampere ARM) if capacity allows; otherwise an Always Free x86 shape
-   - **Networking:** VCN with a **public IP**
-   - **SSH keys:** paste your **public** key
+   - **Shape:** Always Free eligible — prefer **VM.Standard.A1.Flex** (Ampere ARM) if capacity allows; otherwise an Always Free x86 shape such as **VM.Standard.E2.1.Micro** (see [capacity errors](#capacity-errors-out-of-capacity-for-shape) below)
+   - **Confidential computing:** leave **off** — it encrypts VM memory for high-sensitivity workloads and is not needed for this app; it can also block certain image/shape combinations
+   - **Networking:** select the VCN and public subnet created in [Section 1](#1-create-the-network-vcn--subnet); ensure **Assign a public IPv4 address** is on
+   - **SSH keys:** upload your **public** key file (the `.pub` file, never the private key)
+   - **Boot volume:** leave **"Specify a custom boot volume size and performance"** off (the ~47 GB default is enough); leave **"Use in-transit encryption"** on if offered; leave **"Encrypt this volume with a key that you manage"** off (Oracle-managed encryption is fine — a customer-managed key needs a Vault you don't need for this project)
 
 4. Create the instance; wait until state is **Running**.
 5. Copy the **Public IP**.
 
 **Networking:** keep SSH (22) open (ideally restricted to your IP). Outbound internet must work for Docker pulls and LLM API calls. Do not open `7860` if using Cloudflare Tunnel.
 
+### Capacity errors ("Out of capacity for shape ...")
+
+Oracle Always Free Ampere (`VM.Standard.A1.Flex`) capacity is shared across all free-tier users per region and availability domain, and often runs out. If you see:
+
+> Out of capacity for shape VM.Standard.A1.Flex in availability domain AD-x.
+
+this is a temporary regional shortage, not a mistake in your config. Options, roughly in order of effort:
+
+1. **Retry later**, cycling through AD-1 / AD-2 / AD-3, without specifying a fault domain.
+2. **Request a smaller A1 shape** — e.g. 1 OCPU / 6 GB RAM instead of a larger flexible size; smaller requests are sometimes easier to place.
+3. **Switch to an Always Free x86 shape** instead of Ampere, e.g. **VM.Standard.E2.1.Micro**. Everything in this guide still works — just use the `amd64` `cloudflared` package instead of `arm64` in [Section 8c](#8c-install-cloudflared-on-the-vm) (check with `uname -m`).
+4. Avoid extra constraints that reduce placement options (e.g. confidential computing, custom boot volume shapes) until the instance is created.
+
 ---
 
-## 2. SSH into the VM
+## 3. SSH into the VM
 
 ```bash
 ssh -i ~/.ssh/id_ed25519 ubuntu@<VM_PUBLIC_IP>
@@ -64,7 +166,7 @@ On Oracle Ubuntu images the default user is usually `ubuntu`. Accept the host ke
 
 ---
 
-## 3. Clone the repo
+## 4. Clone the repo
 
 ```bash
 sudo apt-get update
@@ -78,7 +180,7 @@ Use `-b main` after merging. For a private repo, use SSH clone + a deploy key, o
 
 ---
 
-## 4. First bootstrap (Docker + `.env`)
+## 5. First bootstrap (Docker + `.env`)
 
 ```bash
 bash scripts/oracle-bootstrap.sh
@@ -100,7 +202,7 @@ newgrp docker
 
 ---
 
-## 5. Configure `.env` on the VM
+## 6. Configure `.env` on the VM
 
 ```bash
 nano .env
@@ -128,7 +230,7 @@ Optional: `GITHUB_TOKEN` for higher GitHub API rate limits.
 
 ---
 
-## 6. Build and start the app
+## 7. Build and start the app
 
 ```bash
 bash scripts/oracle-bootstrap.sh
@@ -154,21 +256,21 @@ Expect JSON with `"status":"ok"`. The app is not public yet — only on localhos
 
 ---
 
-## 7. Cloudflare Tunnel (public HTTPS)
+## 8. Cloudflare Tunnel (public HTTPS)
 
-### 7a. Account
+### 8a. Account
 
 1. Sign in at [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) (or the Cloudflare dashboard).
 2. Prefer a **named tunnel** (survives reboots) over a one-off quick tunnel.
 
-### 7b. Create a named tunnel
+### 8b. Create a named tunnel
 
 1. Zero Trust → **Networks → Tunnels → Create a tunnel**
 2. Choose **Cloudflared**
 3. Name it e.g. `profile-rag-oracle`
 4. Copy the install token / command Cloudflare shows
 
-### 7c. Install `cloudflared` on the VM
+### 8c. Install `cloudflared` on the VM
 
 Check architecture:
 
@@ -189,7 +291,7 @@ sudo dpkg -i cloudflared.deb
 cloudflared --version
 ```
 
-### 7d. Run the tunnel as a service
+### 8d. Run the tunnel as a service
 
 Use the token from Cloudflare. **Never commit the token.**
 
@@ -200,7 +302,7 @@ sudo systemctl start cloudflared
 sudo systemctl status cloudflared
 ```
 
-### 7e. Public hostname → app
+### 8e. Public hostname → app
 
 In the tunnel **Public Hostname** settings:
 
@@ -215,7 +317,7 @@ Save and wait a minute for DNS. For a quick test without a domain, Cloudflare’
 
 ---
 
-## 8. Create the agent and share the link
+## 9. Create the agent and share the link
 
 1. Open `https://<your-hostname>/`
 2. Unlock the builder with `OWNER_SECRET` (literal `$`, not `$$`)
@@ -227,7 +329,7 @@ Recruiter check: open the chat URL in a private window (no owner secret). Ask an
 
 ---
 
-## 9. Ongoing operations
+## 10. Ongoing operations
 
 **Update after code changes:**
 
@@ -253,7 +355,7 @@ After PDF / chunk / GitHub pipeline changes, recreate the agent or call `POST /a
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 | Problem | Fix |
 |--------|-----|
@@ -261,13 +363,14 @@ After PDF / chunk / GitHub pipeline changes, recreate the agent or call `POST /a
 | Docker permission denied | `newgrp docker` or re-login after bootstrap |
 | Health check fails | Check logs; confirm `LLM_*` in `.env`; wait for first embedding download |
 | Tunnel up, site down | Confirm `curl http://127.0.0.1:7860/api/health`; hostname → `http://localhost:7860`; `systemctl status cloudflared` |
-| Out of Always Free capacity | Try another region / Ampere shape, or retry later |
+| `Out of capacity for shape ...` when creating the instance | Regional Always Free capacity shortage, not a config error — see [Capacity errors](#capacity-errors-out-of-capacity-for-shape) in Section 2 |
 | Wrong `cloudflared` arch | Match `.deb` to `uname -m` (`arm64` vs `amd64`) |
 
 ---
 
 ## Checklist
 
+- [ ] VCN + public subnet created (or existing ones reused)
 - [ ] VM running, SSH works
 - [ ] Repo cloned (correct branch)
 - [ ] `.env` set (`LLM_API_KEY`, `OWNER_SECRET`, `PUBLIC_CHAT_ONLY=true`)
