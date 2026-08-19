@@ -17,7 +17,7 @@ Cross-session notes for coding agents working in this repo.
 | `docker-compose.override.yml` | Local only: bind-mounts `./backend` |
 | `docker-compose.prod.yml` | Oracle/public: `PUBLIC_CHAT_ONLY`, no backend mount |
 | `scripts/oracle-bootstrap.sh` | VM Docker install + prod `up --build` |
-| `docs/ORACLE_DEPLOY.md` | Full Oracle + Cloudflare Tunnel walkthrough |
+| `docs/ORACLE_DEPLOY.md` | Full Oracle + Cloudflare Tunnel walkthrough (VCN, apt mirrors, Routes UI) |
 | `examples/sample-profile/` | Smoke-test corpus |
 | `.env` | Secrets (gitignored); escape `$` as `$$` for Compose |
 

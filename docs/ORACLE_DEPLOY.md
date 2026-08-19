@@ -8,6 +8,8 @@ Recruiter → HTTPS (Cloudflare) → Tunnel → VM → Docker app :7860 → ./da
 
 Do **not** open ingress port `7860` on the Oracle security list when using a tunnel. SSH (22) is enough for admin access.
 
+Working public example from this repo's author: [https://chat.rdhumal.com/a/5d0805be2236](https://chat.rdhumal.com/a/5d0805be2236) (`chat.` subdomain → Cloudflare Tunnel → `localhost:7860`).
+
 Related files:
 
 - [`docker-compose.yml`](../docker-compose.yml) — base service
@@ -31,7 +33,7 @@ Related files:
    - An LLM API key ([NVIDIA NIM](https://build.nvidia.com/) or [Groq](https://console.groq.com/))
    - A strong `OWNER_SECRET` (if it contains `$`, you will write `$$` in `.env` on the VM)
 
-3. Optional but better for a stable recruiter URL: a domain on Cloudflare.
+3. A domain you control, added to Cloudflare, for a stable recruiter URL (buy or connect; `*.github.io` cannot be a tunnel hostname). A `chat.` subdomain is enough; the apex can host a portfolio later.
 
 ---
 
@@ -100,15 +102,29 @@ Inside the new VCN: **Subnets → Create Subnet.**
 
 Click **Create Subnet**.
 
-### 1c. Add an Internet Gateway (if the wizard didn't already)
+### 1c. Add an Internet Gateway and a public route table
 
-If Oracle's "Create VCN" wizard offered a one-click "VCN with Internet Connectivity" option, this is already done. Otherwise, manually add it:
+If Oracle's "Create VCN" wizard offered a one-click "VCN with Internet Connectivity" option, this is already done. If you created the VCN by hand, do this **before** you expect SSH from the internet.
 
-1. **Networking → Virtual Cloud Networks → &lt;your VCN&gt; → Internet Gateways → Create Internet Gateway.** Name it `igw` and create it.
-2. **Route Tables → Default Route Table → Add Route Rule:**
-   - Destination CIDR: `0.0.0.0/0` (meaning "anywhere on the internet")
-   - Target type: **Internet Gateway**
-   - Target: the gateway you just created
+1. **Networking → Virtual Cloud Networks → &lt;your VCN&gt; → Internet Gateways → Create Internet Gateway.** Name it `igw`, leave it **Enabled**.
+
+2. Add a default route. Prefer a **new** route table if the default one rejects an IGW target (see below):
+
+   **Route Tables → Create Route Table** (e.g. `public-rt`), then add:
+
+   | Field | Value |
+   |--------|--------|
+   | Destination CIDR | `0.0.0.0/0` |
+   | Target type | **Internet Gateway** (not Private IP) |
+   | Target | `igw` |
+
+3. **Subnets → public-subnet → Edit** → set **Route Table** to `public-rt`.
+
+If editing the **default** route table fails with:
+
+> Rules in the route table must use private IP as a target. Or the route table can be empty (no rules).
+
+that table is treated as private-only. Do not force an IGW onto it. Create `public-rt` as above and attach it to the **public** subnet. A public IP on the instance is not enough without this route — SSH will **time out**.
 
 ### 1d. Confirm the security list allows SSH
 
@@ -164,6 +180,12 @@ ssh -i ~/.ssh/id_ed25519 ubuntu@<VM_PUBLIC_IP>
 
 On Oracle Ubuntu images the default user is usually `ubuntu`. Accept the host key on first connect.
 
+If you get `ssh: connect to host <IP> port 22: Connection timed out`, packets are not reaching the VM. That is almost always missing IGW / public route table (Section 1c) or missing security-list TCP 22 (Section 1d) — not a bad SSH key (`Permission denied` would mean the key). Confirm the instance is **Running**, then:
+
+```powershell
+Test-NetConnection <VM_PUBLIC_IP> -Port 22
+```
+
 ---
 
 ## 4. Clone the repo
@@ -172,11 +194,12 @@ On Oracle Ubuntu images the default user is usually `ubuntu`. Accept the host ke
 sudo apt-get update
 sudo apt-get install -y git curl
 
-git clone -b deploy/oracle https://github.com/<YOUR_USERNAME>/profile-rag-agent.git
+git clone https://github.com/<YOUR_USERNAME>/profile-rag-agent.git
+# If deploy files are only on a feature branch:  git clone -b deploy/oracle ...
 cd profile-rag-agent
 ```
 
-Use `-b main` after merging. For a private repo, use SSH clone + a deploy key, or HTTPS with a personal access token.
+For a private repo, use SSH clone + a deploy key, or HTTPS with a personal access token.
 
 ---
 
@@ -199,6 +222,18 @@ If Docker was just installed and you hit permission errors:
 newgrp docker
 # or log out and SSH back in
 ```
+
+#### Ampere Ubuntu apt mirror DNS
+
+Oracle ARM images often list `http://iad-ad-1.clouds.ports.ubuntu.com/ubuntu-ports` (the AD number varies). That hostname frequently **does not resolve**, so `apt-get` fails while `ports.ubuntu.com` and `download.docker.com` still work. Typical symptom: Docker `.deb` files download, then `pigz` fails with `Could not resolve 'iad-ad-*.clouds.ports.ubuntu.com'`.
+
+```bash
+sudo sed -i 's|http://[^/]*clouds.ports.ubuntu.com/ubuntu-ports|http://ports.ubuntu.com/ubuntu-ports|g' /etc/apt/sources.list
+sudo grep -R "clouds.ports.ubuntu.com" /etc/apt/sources.list /etc/apt/sources.list.d/ || true
+sudo apt-get update
+```
+
+Then re-run the bootstrap script (or install Docker packages by hand). Also replace the same host in any file under `/etc/apt/sources.list.d/` if `sed` did not catch it.
 
 ---
 
@@ -258,21 +293,27 @@ Expect JSON with `"status":"ok"`. The app is not public yet — only on localhos
 
 ## 8. Cloudflare Tunnel (public HTTPS)
 
-### 8a. Account
+A tunnel is recommended, not mandatory. Opening TCP **7860** on the security list gives `http://<public-ip>:7860` for a test (no HTTPS). Recruiters should get `https://chat.<your-domain>/a/<id>`.
+
+You need a **domain you control** in Cloudflare (buy or connect). You cannot use `you.github.io`. One domain can later serve a portfolio on `@` / `www` and the agent on `chat.` — do not point the same hostname at both GitHub Pages and the tunnel.
+
+### 8a. Account and domain
 
 1. Sign in at [Cloudflare Zero Trust](https://one.dash.cloudflare.com/) (or the Cloudflare dashboard).
-2. Prefer a **named tunnel** (survives reboots) over a one-off quick tunnel.
+2. **Buy** a domain or **Connect** one you already own. Skip **Transfer** unless you are moving a registration you already have.
+3. Prefer a **named tunnel** (survives reboots) over a one-off `trycloudflare.com` URL.
 
 ### 8b. Create a named tunnel
 
 1. Zero Trust → **Networks → Tunnels → Create a tunnel**
 2. Choose **Cloudflared**
 3. Name it e.g. `profile-rag-oracle`
-4. Copy the install token / command Cloudflare shows
+4. Installer OS: **Debian** (Ubuntu is Debian-based). Architecture: **arm64** on Ampere (`uname -m` → `aarch64`); **amd64** on x86 (`x86_64`).
+5. Copy the install token / command. **Never commit the token.**
+
+During `apt`/`dpkg` you may see **needrestart** prompts (newer kernel, “which services to restart”). Finish the install; reboot later if you want the new kernel. `cloudflared` as a systemd service and Compose `restart: unless-stopped` come back after reboot.
 
 ### 8c. Install `cloudflared` on the VM
-
-Check architecture:
 
 ```bash
 uname -m
@@ -280,7 +321,7 @@ uname -m
 # x86_64  → amd64 package
 ```
 
-Install from Cloudflare’s [installation docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/), for example:
+Follow Cloudflare’s [installation docs](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/) or the dashboard command, for example:
 
 ```bash
 curl -L --output cloudflared.deb \
@@ -293,8 +334,6 @@ cloudflared --version
 
 ### 8d. Run the tunnel as a service
 
-Use the token from Cloudflare. **Never commit the token.**
-
 ```bash
 sudo cloudflared service install <YOUR_TUNNEL_TOKEN>
 sudo systemctl enable cloudflared
@@ -302,30 +341,39 @@ sudo systemctl start cloudflared
 sudo systemctl status cloudflared
 ```
 
-### 8e. Public hostname → app
+`Active: active (running)` and **Healthy** in the dashboard are enough. **Routes: 0** means the tunnel is up but nothing is published yet.
 
-In the tunnel **Public Hostname** settings:
+### 8e. Published application route (public hostname)
+
+The current Zero Trust UI uses **Routes**, not a separate “Public hostname” tab.
+
+1. Open the tunnel → **Add route** (not a private CIDR / WARP route).
+2. Type: **Published application**.
+3. Fill in:
 
 | Field | Value |
 |--------|--------|
-| Subdomain | e.g. `chat` or `profile` |
-| Domain | your Cloudflare domain |
-| Type | HTTP |
-| URL | `localhost:7860` |
+| Hostname | e.g. `chat.example.com` |
+| Type / service | **HTTP** |
+| URL | `http://localhost:7860` |
 
-Save and wait a minute for DNS. For a quick test without a domain, Cloudflare’s trycloudflare / quick tunnel flow works, but a named tunnel + your domain is better for recruiters.
+Do **not** set the origin to the Oracle public IP. Cloudflare should create a CNAME from `chat.example.com` to `*.cfargotunnel.com`.
+
+4. Wait 1–2 minutes. Open `https://chat.example.com/`.
+
+Without a domain, a quick tunnel (`cloudflared tunnel --url http://localhost:7860`) yields a temporary `*.trycloudflare.com` URL that can change on restart — fine for a test, poor on a resume.
 
 ---
 
 ## 9. Create the agent and share the link
 
-1. Open `https://<your-hostname>/`
+1. Open `https://<your-hostname>/` (e.g. `https://chat.example.com/`)
 2. Unlock the builder with `OWNER_SECRET` (literal `$`, not `$$`)
 3. Fill profile / resume / FAQ / GitHub
 4. Create agent
-5. Share `https://<your-hostname>/a/<agent_id>`
+5. Share **only** `https://<your-hostname>/a/<agent_id>` with recruiters — not `OWNER_SECRET`, and not the builder root if you want them to land in chat
 
-Recruiter check: open the chat URL in a private window (no owner secret). Ask an FAQ question (e.g. relocate). Off-profile questions should refuse.
+Recruiter check: open the chat URL in a **private / incognito** window (no owner secret stored). Ask an FAQ question (e.g. relocate). Off-profile questions should refuse. The builder at `/` stays locked when `PUBLIC_CHAT_ONLY=true`.
 
 ---
 
@@ -359,22 +407,29 @@ After PDF / chunk / GitHub pipeline changes, recreate the agent or call `POST /a
 
 | Problem | Fix |
 |--------|-----|
+| `ssh: connect to host … port 22: Connection timed out` | IGW + **public** route table (`0.0.0.0/0` → Internet Gateway) + security-list TCP 22. See Sections 1c–1d. |
+| Route table: *must use private IP as a target* | Default RT is private-only. Create `public-rt` with IGW and attach it to the public subnet. Target type must be **Internet Gateway**. |
+| `Could not resolve iad-ad-*.clouds.ports.ubuntu.com` | Point apt at `http://ports.ubuntu.com/ubuntu-ports` (Section 5). |
 | `Invalid or missing owner secret` | Escape `$` as `$$` in `.env`; recreate containers; unlock with the literal secret |
 | Docker permission denied | `newgrp docker` or re-login after bootstrap |
 | Health check fails | Check logs; confirm `LLM_*` in `.env`; wait for first embedding download |
-| Tunnel up, site down | Confirm `curl http://127.0.0.1:7860/api/health`; hostname → `http://localhost:7860`; `systemctl status cloudflared` |
+| Tunnel Healthy, Routes 0 | Add a **Published application** route to `http://localhost:7860` |
+| Tunnel up, site 502 / down | Confirm `curl http://127.0.0.1:7860/api/health`; origin must be localhost, not the VM public IP; `systemctl status cloudflared` |
 | `Out of capacity for shape ...` when creating the instance | Regional Always Free capacity shortage, not a config error — see [Capacity errors](#capacity-errors-out-of-capacity-for-shape) in Section 2 |
-| Wrong `cloudflared` arch | Match `.deb` to `uname -m` (`arm64` vs `amd64`) |
+| Wrong `cloudflared` arch | Ubuntu Ampere: Debian **arm64**. Match `.deb` to `uname -m` |
+| Confidential computing blocked for Ubuntu + A1 | Leave it **off** — not needed for this app |
 
 ---
 
 ## Checklist
 
-- [ ] VCN + public subnet created (or existing ones reused)
+- [ ] VCN + public subnet + Internet Gateway + public route table (`0.0.0.0/0` → IGW)
+- [ ] Security list allows SSH (22); port 7860 stays closed when using a tunnel
 - [ ] VM running, SSH works
 - [ ] Repo cloned (correct branch)
 - [ ] `.env` set (`LLM_API_KEY`, `OWNER_SECRET`, `PUBLIC_CHAT_ONLY=true`)
 - [ ] `curl http://127.0.0.1:7860/api/health` OK
-- [ ] Cloudflare Tunnel service running
-- [ ] HTTPS hostname opens the builder
-- [ ] Agent created; `/a/<id>` works in a private window
+- [ ] Cloudflare Tunnel service running (Healthy)
+- [ ] Published application route: `chat.<domain>` → `http://localhost:7860`
+- [ ] HTTPS hostname opens the builder; unlock with literal `OWNER_SECRET`
+- [ ] Agent created; `/a/<id>` works in a private window without the owner secret

@@ -59,8 +59,9 @@ Vite proxies `/api` to the API on port 7860.
 | `frontend/src/` | Builder UI + public chat (`/a/:agentId`) |
 | `examples/sample-profile/` | Smoke-test corpus |
 | `Dockerfile` | Production image |
-| `docker-compose.prod.yml` | Public VM / Oracle (`PUBLIC_CHAT_ONLY`, no backend mount) |
 | `docker-compose.yml` | Local run |
+| `docker-compose.prod.yml` | Public VM / Oracle (`PUBLIC_CHAT_ONLY`, no backend mount) |
+| `docs/ORACLE_DEPLOY.md` | Oracle Always Free + Cloudflare Tunnel |
 
 Agent data lives under `data/agents/{id}/` (`meta.json`, `sources/`, `chroma/`). Do not commit secrets or personal agent data.
 

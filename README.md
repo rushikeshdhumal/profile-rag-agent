@@ -4,6 +4,8 @@
 
 Candidates ingest a resume, pasted LinkedIn/FAQ text, GitHub, and notes into a grounded retrieval pipeline, deploy once (local Docker or a free VM), and share a public chat URL with recruiters. Recruiters never install anything. Answers stay tied to uploaded sources — unknowns are refused, not invented.
 
+**Live demo (this author's profile):** [https://chat.rdhumal.com/a/5d0805be2236](https://chat.rdhumal.com/a/5d0805be2236)
+
 ## Features
 
 - **Grounded RAG chat** — retrieval-augmented answers with source-aware boosting (resume, FAQ, GitHub)
@@ -104,7 +106,9 @@ Vite proxies `/api` to port 7860.
 
 Recommended free public host: an [Oracle Cloud Always Free](https://www.oracle.com/cloud/free/) Ubuntu VM plus a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/) for HTTPS. The tunnel reaches `localhost:7860` — **do not** open ingress port 7860 on the Oracle security list.
 
-**Full walkthrough:** [docs/ORACLE_DEPLOY.md](docs/ORACLE_DEPLOY.md)
+A tunnel is not strictly required (you can open TCP 7860 for a test), but it is the practical way to get a stable `https://chat.<your-domain>/a/<agent_id>` recruiter link. You need a domain you control on Cloudflare (`*.github.io` cannot be a tunnel hostname). A subdomain such as `chat.` can host the agent; keep the apex for a portfolio later.
+
+**Full walkthrough (VCN, SSH, apt mirrors, Cloudflare Routes):** [docs/ORACLE_DEPLOY.md](docs/ORACLE_DEPLOY.md)
 
 ```text
 Recruiter → HTTPS (Cloudflare) → Tunnel → VM → Docker app :7860 → ./data
@@ -114,7 +118,7 @@ Recruiter → HTTPS (Cloudflare) → Tunnel → VM → Docker app :7860 → ./da
 
 ```bash
 ssh ubuntu@<VM_PUBLIC_IP>
-git clone -b deploy/oracle https://github.com/<you>/profile-rag-agent.git
+git clone https://github.com/<you>/profile-rag-agent.git   # or -b deploy/oracle
 cd profile-rag-agent
 bash scripts/oracle-bootstrap.sh   # first run creates .env — edit it, then re-run
 # Set LLM_API_KEY, OWNER_SECRET (escape $ as $$), PUBLIC_CHAT_ONLY=true
@@ -122,14 +126,16 @@ bash scripts/oracle-bootstrap.sh
 curl -s http://127.0.0.1:7860/api/health
 ```
 
-Then install a Cloudflare named tunnel routing a hostname to `http://localhost:7860` (see the full guide). Unlock the builder, create an agent, share `/a/<agent_id>`.
+Then: named Cloudflare tunnel (Ubuntu ARM → **Debian** + **arm64**), **Routes → Add route → Published application**, hostname e.g. `chat.example.com` → **HTTP** `http://localhost:7860`. Unlock the builder, create an agent, share **only** `/a/<agent_id>` (incognito check). Do not share `OWNER_SECRET`.
 
 ### Updates and troubleshooting
 
 - After UI or Dockerfile changes: `git pull` then `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
 - After PDF/chunk/GitHub pipeline changes: recreate the agent or `POST /api/agents/{id}/reindex` with the owner header
 - `Invalid or missing owner secret`: escape `$` as `$$` in `.env`, recreate containers, unlock with the literal secret (one `$`)
-- See [docs/ORACLE_DEPLOY.md](docs/ORACLE_DEPLOY.md) for Cloudflare install, checklist, and a fuller troubleshooting table
+- SSH timeout: missing Internet Gateway or public route table — see the deploy guide
+- `Could not resolve iad-ad-*.clouds.ports.ubuntu.com`: switch apt to `ports.ubuntu.com` (Ampere Ubuntu)
+- See [docs/ORACLE_DEPLOY.md](docs/ORACLE_DEPLOY.md) for VCN/route-table gotchas, Cloudflare UI, checklist, and troubleshooting
 
 ## Ingestion sources
 

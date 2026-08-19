@@ -32,7 +32,7 @@ Open-source RAG system for conversational profile discovery. Self-host on Docker
 6. **Retrieval:** experience queries must boost resume/linkedin; distance cutoff ~0.88 (0.75 was too aggressive and dropped resume hits). GitHub is split into multiple docs with truncation — do not re-merge into one giant blob.
 7. **Frontend in Docker:** Local override mounts `backend/` only; prod uses image code. Rebuild image (`docker compose up --build`, or prod `-f` pair) after UI changes so `frontend/dist` updates.
 8. **Secrets:** never commit `.env` or Cloudflare tunnel tokens. Rotate keys if exposed. Prefer not echoing live secrets in logs/chat.
-9. **Oracle public access:** prefer Cloudflare Tunnel to `localhost:7860`; do not open ingress 7860 when using a tunnel. Use `docker-compose.prod.yml` (`PUBLIC_CHAT_ONLY=true`).
+9. **Oracle public access:** prefer Cloudflare Tunnel to `localhost:7860`; do not open ingress 7860 when using a tunnel. Use `docker-compose.prod.yml` (`PUBLIC_CHAT_ONLY=true`). Named tunnel **Routes** are **Published application** hostnames (e.g. `chat.example.com`) → `http://localhost:7860`, not the VM public IP. Hand-built VCNs need an IGW plus a **public** route table (`0.0.0.0/0` → IGW); the default table may reject IGW with “must use private IP as a target.” Ampere Ubuntu apt may fail on `*.clouds.ports.ubuntu.com` — switch to `ports.ubuntu.com`.
 
 ## Local run
 
