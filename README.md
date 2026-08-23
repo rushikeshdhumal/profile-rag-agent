@@ -2,7 +2,9 @@
 
 **Open-source RAG system for conversational profile discovery.**
 
-Candidates ingest a resume, pasted LinkedIn/FAQ text, GitHub, and notes into a grounded retrieval pipeline, deploy once (locally or on Hugging Face Spaces), and share a public chat URL with recruiters. Recruiters never install anything. Answers stay tied to uploaded sources — unknowns are refused, not invented.
+Candidates ingest a resume, pasted LinkedIn/FAQ text, GitHub, and notes into a grounded retrieval pipeline, deploy once (local Docker or a free VM), and share a public chat URL with recruiters. Recruiters never install anything. Answers stay tied to uploaded sources — unknowns are refused, not invented.
+
+**Live demo (this author's profile):** [https://chat.rdhumal.com/a/5d0805be2236](https://chat.rdhumal.com/a/5d0805be2236)
 
 ## Features
 
@@ -11,7 +13,7 @@ Candidates ingest a resume, pasted LinkedIn/FAQ text, GitHub, and notes into a g
 - **Local embeddings** — FastEmbed ONNX (`all-MiniLM-L6-v2`); no GPU or PyTorch required
 - **BYO LLM** — OpenAI-compatible clients for NVIDIA NIM, Groq, or Ollama
 - **Owner-gated builder** — `OWNER_SECRET` protects create/reindex; public chat is shareable
-- **Free deploy path** — single Docker image for local Compose or Hugging Face Spaces
+- **Self-host deploy** — single Docker image; Oracle Always Free + Cloudflare Tunnel recommended for a public HTTPS URL
 
 ## Stack
 
@@ -22,7 +24,7 @@ Candidates ingest a resume, pasted LinkedIn/FAQ text, GitHub, and notes into a g
 | Embeddings | FastEmbed (ONNX) |
 | Vector store | Chroma on disk |
 | LLM | OpenAI-compatible HTTP API |
-| Deploy | Docker / Docker Compose / HF Spaces |
+| Deploy | Docker Compose (local) / Oracle Always Free + Cloudflare Tunnel |
 
 ## System architecture
 
@@ -100,15 +102,40 @@ npm run dev
 
 Vite proxies `/api` to port 7860.
 
-## Deploy (Hugging Face Spaces)
+## Deploy on Oracle Always Free
 
-1. Create a **Docker** Space (app port **7860**) and push this repo (or connect GitHub).
-2. If the Space needs README YAML config, prepend the keys from [`hf_space_metadata.yml`](hf_space_metadata.yml) as a `---` frontmatter block on the Space copy of `README.md` only — keep this GitHub README free of that block so it does not render as a metadata table.
-3. **Secrets:** `LLM_API_KEY`, `OWNER_SECRET`; optional `GITHUB_TOKEN`, `LLM_*` overrides.
-4. **Variables:** `PUBLIC_CHAT_ONLY=true`, plus `LLM_PROVIDER` / `LLM_MODEL` as needed.
-5. Unlock the builder with `OWNER_SECRET`, create an agent, share the chat URL.
+Recommended free public host: an [Oracle Cloud Always Free](https://www.oracle.com/cloud/free/) Ubuntu VM plus a [Cloudflare Tunnel](https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/) for HTTPS. The tunnel reaches `localhost:7860` — **do not** open ingress port 7860 on the Oracle security list.
 
-Custom domain: Cloudflare CNAME → [HF Spaces custom domains](https://huggingface.co/docs/hub/spaces-config-reference). Free Spaces may cold-start (~30–60s after idle).
+A tunnel is not strictly required (you can open TCP 7860 for a test), but it is the practical way to get a stable `https://chat.<your-domain>/a/<agent_id>` recruiter link. You need a domain you control on Cloudflare (`*.github.io` cannot be a tunnel hostname). A subdomain such as `chat.` can host the agent; keep the apex for a portfolio later.
+
+**Full walkthrough (VCN, SSH, apt mirrors, Cloudflare Routes):** [docs/ORACLE_DEPLOY.md](docs/ORACLE_DEPLOY.md)
+
+```text
+Recruiter → HTTPS (Cloudflare) → Tunnel → VM → Docker app :7860 → ./data
+```
+
+### Quick path
+
+```bash
+ssh ubuntu@<VM_PUBLIC_IP>
+git clone https://github.com/<you>/profile-rag-agent.git   # or -b deploy/oracle
+cd profile-rag-agent
+bash scripts/oracle-bootstrap.sh   # first run creates .env — edit it, then re-run
+# Set LLM_API_KEY, OWNER_SECRET (escape $ as $$), PUBLIC_CHAT_ONLY=true
+bash scripts/oracle-bootstrap.sh
+curl -s http://127.0.0.1:7860/api/health
+```
+
+Then: named Cloudflare tunnel (Ubuntu ARM → **Debian** + **arm64**), **Routes → Add route → Published application**, hostname e.g. `chat.example.com` → **HTTP** `http://localhost:7860`. Unlock the builder, create an agent, share **only** `/a/<agent_id>` (incognito check). Do not share `OWNER_SECRET`.
+
+### Updates and troubleshooting
+
+- After UI or Dockerfile changes: `git pull` then `docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build`
+- After PDF/chunk/GitHub pipeline changes: recreate the agent or `POST /api/agents/{id}/reindex` with the owner header
+- `Invalid or missing owner secret`: escape `$` as `$$` in `.env`, recreate containers, unlock with the literal secret (one `$`)
+- SSH timeout: missing Internet Gateway or public route table — see the deploy guide
+- `Could not resolve iad-ad-*.clouds.ports.ubuntu.com`: switch apt to `ports.ubuntu.com` (Ampere Ubuntu)
+- See [docs/ORACLE_DEPLOY.md](docs/ORACLE_DEPLOY.md) for VCN/route-table gotchas, Cloudflare UI, checklist, and troubleshooting
 
 ## Ingestion sources
 
@@ -162,8 +189,10 @@ LLM_MODEL=llama3.1
 
 ## Security
 
-- Never commit `.env` or put `LLM_API_KEY` in the frontend.
-- Mutating routes require `X-Owner-Secret` when `OWNER_SECRET` is set.
+- Never commit `.env`, Cloudflare tunnel tokens, or put `LLM_API_KEY` in the frontend.
+- On public VMs set `PUBLIC_CHAT_ONLY=true` (prod Compose sets this) so only owners with `OWNER_SECRET` can create/reindex.
+- Mutating routes require `X-Owner-Secret` when `OWNER_SECRET` is set. Use a strong secret; escape `$` as `$$` in Compose `.env` files.
+- Prefer Cloudflare Tunnel over exposing `0.0.0.0:7860` on the public internet (no ingress port needed).
 - Free NIM tiers are rate-limited; fine for personal recruiting traffic, not a public viral bot.
 
 ## Contributing

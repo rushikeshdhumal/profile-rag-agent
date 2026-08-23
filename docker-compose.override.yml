@@ -1,0 +1,8 @@
+# Auto-loaded for local `docker compose up` only.
+# Not applied when you pass explicit -f files, e.g. Oracle production:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+services:
+  app:
+    volumes:
+      - ./backend:/app/backend

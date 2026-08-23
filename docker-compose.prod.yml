@@ -1,0 +1,16 @@
+# Production override for Oracle Always Free (and similar VMs).
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Differences from local compose:
+# - No ./backend bind-mount (run the image build, not live host code)
+# - PUBLIC_CHAT_ONLY=true (builder locked behind OWNER_SECRET; chat stays public)
+
+services:
+  app:
+    environment:
+      DATA_DIR: /data
+      STATIC_DIR: /app/frontend/dist
+      PUBLIC_CHAT_ONLY: "true"
+    volumes:
+      - ./data:/data

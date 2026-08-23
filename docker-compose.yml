@@ -13,5 +13,4 @@ services:
       STATIC_DIR: /app/frontend/dist
     volumes:
       - ./data:/data
-      - ./backend:/app/backend
     restart: unless-stopped
