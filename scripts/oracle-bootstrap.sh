@@ -46,6 +46,13 @@ echo "==> Building and starting (production compose)"
 docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
 
 echo "==> Waiting for health"
+
+if ! command -v curl >/dev/null 2>&1; then
+  echo "==> Installing curl (required for health check)"
+  sudo apt-get update
+  sudo apt-get install -y curl
+fi
+
 for i in $(seq 1 30); do
   if curl -sf http://127.0.0.1:7860/api/health >/dev/null; then
     echo "Healthy: http://127.0.0.1:7860/api/health"
