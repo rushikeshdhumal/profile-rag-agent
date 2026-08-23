@@ -13,7 +13,7 @@ echo "==> Profile RAG Agent — Oracle bootstrap"
 if ! command -v docker >/dev/null 2>&1; then
   echo "==> Installing Docker Engine + Compose plugin"
   sudo apt-get update
-  sudo apt-get install -y ca-certificates curl
+  sudo apt-get install -y ca-certificates curl gnupg
   sudo install -m 0755 -d /etc/apt/keyrings
   curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
     | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
