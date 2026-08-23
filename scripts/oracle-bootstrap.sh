@@ -38,7 +38,7 @@ if [[ ! -f .env ]]; then
   exit 0
 fi
 
-if grep -q '^LLM_API_KEY=$' .env 2>/dev/null || grep -q '^LLM_API_KEY=\s*$' .env 2>/dev/null; then
+if grep -Eq '^LLM_API_KEY=[[:space:]]*$' .env 2>/dev/null; then
   echo "WARNING: LLM_API_KEY looks empty in .env — set it before expecting chat to work."
 fi
 
