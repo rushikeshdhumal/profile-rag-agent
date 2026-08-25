@@ -11,9 +11,14 @@ alwaysApply: false
 - `config.py` — pydantic-settings; loads repo-root `.env`
 - `pdf_extract.py` — PDF text extraction + cleanup
 - `github_fetch.py` — `fetch_github_documents()` returns multiple `(filename, text)` docs (identity, repos, readme, top-5 repo READMEs); partial-failure tolerant
-- `ingest.py` — corpus build + markdown-aware chunking (`CHUNK_SIZE=500`); `source_type` metadata
-- `vectorstore.py` — Chroma per agent; `MAX_DISTANCE≈0.88`; prefix/type fetch helpers
-- `rag.py` — logistics / experience / github query boosts; ~6k context budget
+- `ingest.py` — corpus build + markdown-aware chunking (`CHUNK_SIZE=900`, overlap `150`, no hard truncation); heading-breadcrumb prefix per chunk; `source_type`/`heading`/`char_start` metadata
+- `vectorstore.py` — Chroma per agent (`PersistentClient` cached by resolved path); real `where` metadata filters (no Python-side scans); `replace_collection()` does an embed-into-temp-then-swap reindex
+- `bm25.py` — per-agent BM25 lexical index (`rank_bm25`), cached, invalidated by `ingest.index_corpus`
+- `retrieval.py` — hybrid pipeline: dense + BM25 + intent-filtered dense, fused with weighted RRF, optionally reranked
+- `rerank.py` — CPU ONNX cross-encoder (`fastembed.rerank.cross_encoder.TextCrossEncoder`); feature-flagged (`RERANK_ENABLED`)
+- `rag.py` — follow-up query condensation, relevance gate, context budget, system prompt
+- `ratelimit.py` — in-process token bucket per client + per-agent daily cap (no Redis)
+- `observability.py` — request-ID middleware, JSON logs, Prometheus-text `/api/metrics`
 - `llm.py` — OpenAI-compatible chat; 429 backoff
 - `auth.py` — `require_owner`; compare secrets safely (equal-length before `compare_digest`)
 - `routes/agents.py`, `routes/chat.py`
@@ -23,15 +28,22 @@ alwaysApply: false
 - PDF → extract → write `resume_extracted.md` → index that (not only binary PDF)
 - GitHub: never one mega-file; cap profile README ~4k, repo README ~2k
 - FAQ → one file per answer (`faq_*.md`)
-- Raise `ValueError` for unusable resumes → API 400
+- Raise `ValueError` for unusable resumes → API 400 (check length *before* constructing a `Field(min_length=...)` model, so a blank field is a clean 400, not an unhandled `ValidationError`)
+- Chunking never truncates content; long blocks are split into overlapping windows instead (`_slide_window`)
 
 ## Retrieval rules
 
-- Experience/work/resume queries: inject `resume_*` / `source_type=resume` / linkedin chunks
-- Logistics: inject identity + FAQ
-- GitHub/project queries: prefer `github_*` (unless experience query)
+- Retrieval is hybrid, not a single dense query: `retrieval.retrieve()` runs dense (Chroma), BM25, and an intent-filtered dense pass, fuses them with weighted Reciprocal Rank Fusion, then reranks with a cross-encoder
+- The old regex intent rules (experience/logistics/GitHub) are now a **soft RRF prior** (`WEIGHT_INTENT`), not a hard chunk injection — a miscategorized query degrades gracefully instead of losing content. Do not reintroduce hard injection.
+- Follow-up questions get condensed to a standalone query first (`rag._condense_query`, heuristically triggered by `_looks_context_dependent`) so pronoun/short follow-ups actually retrieve something
+- The relevance gate (`rag._apply_relevance_gate`) filters chunks below `RELEVANCE_GATE_SCORE` using the reranker's score, falling back to the top few pre-gate chunks rather than hard-refusing outright — the grounded system prompt is still the final refusal mechanism
 - System prompt: answer only from context; cite project names from context only
 
 ## When changing embeddings or chunking
 
-Tell the user to **recreate or reindex** existing agents; old Chroma collections will be stale.
+Tell the user to **recreate or reindex** existing agents; old Chroma collections will be stale. Then run `python evals/run_eval.py --update` and commit the new baseline — see `docs/EVALUATION.md`.
+
+## Testing
+
+- `backend/tests/` (pytest) covers chunking, vectorstore filters, BM25, RRF fusion, auth, rate limiting, and the API routes via `TestClient`. Tests never call a real LLM (`fake_llm` fixture stubs `chat_completion`) and each gets an isolated `DATA_DIR` (`app.config.get_settings` is `lru_cache`d — tests must call `get_settings.cache_clear()`).
+- `evals/` (no pytest) measures retrieval recall/MRR against a golden set — run before and after any retrieval/chunking change, not just the unit tests.
