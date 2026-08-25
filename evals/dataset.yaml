@@ -47,6 +47,31 @@
   question: "What was Ada's role before Northwind Labs?"
   expected_sources: ["resume.md"]
 
+- id: exp-009
+  category: experience
+  question: "How many years of experience does Ada have?"
+  expected_sources: ["resume.md"]
+
+- id: exp-010
+  category: experience
+  question: "What is Ada's education history?"
+  expected_sources: ["resume.md"]
+
+- id: exp-011
+  category: experience
+  question: "Where did Ada go to school?"
+  expected_sources: ["resume.md"]
+
+- id: exp-012
+  category: experience
+  question: "experience of Ada?"
+  expected_sources: ["resume.md", "identity.md"]
+
+- id: exp-013
+  category: experience
+  question: "years of experience"
+  expected_sources: ["resume.md"]
+
 - id: log-001
   category: logistics
   question: "Is Ada open to relocating?"
@@ -116,6 +141,11 @@
   category: github
   question: "What tech stack does the rag-toolkit repo use?"
   expected_sources: ["github_repo_rag_toolkit.md"]
+
+- id: gh-008
+  category: github
+  question: "What is Ada's most recent GitHub project?"
+  expected_sources: ["github_repos.md"]
 
 - id: fu-001
   category: followup
