@@ -62,6 +62,16 @@ with `--update` and commit the new `evals/baseline.json` alongside the
 dataset change — a baseline bump should always be reviewed like a code
 change, since it's the thing that would otherwise silently mask a regression.
 
+`exp-009` through `exp-013` and `gh-008` cover a real production gap: "years
+of experience", "education history", "experience of &lt;name&gt;", and "most
+recent GitHub project" all retrieved poorly (or refused) before the sample
+resume had an Education section and GitHub repo listings carried
+`updated`/`pushed` dates (see `app.github_fetch._format_repos` and
+`evals/corpus.py`'s `_GITHUB_REPOS`). Note that this eval only measures
+**retrieval** — whether the right chunk is in the top-k — not whether the
+LLM's final wording states a correct year count or date. Wording quality
+(e.g. "Ada has 4+ years of experience") is exercised manually, not by CI.
+
 ## Reproducibility notes
 
 Two things make ANN vector search slightly non-deterministic run to run:
