@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from app.llm import LLMError
 from app.rag import answer_question
+from app.ratelimit import enforce_chat_rate_limit
 from app.schemas import ChatRequest, ChatResponse
 from app.store import load_meta
 
@@ -14,7 +15,9 @@ router = APIRouter(prefix="/api", tags=["chat"])
 
 
 @router.post("/chat", response_model=ChatResponse)
-def chat(payload: ChatRequest) -> ChatResponse:
+def chat(payload: ChatRequest, request: Request) -> ChatResponse:
+    enforce_chat_rate_limit(request, payload.agent_id)
+
     try:
         meta = load_meta(payload.agent_id)
     except FileNotFoundError as exc:
