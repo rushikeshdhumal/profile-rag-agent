@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+MAX_CHAT_HISTORY = 40
+MAX_CHAT_MESSAGE_CHARS = 8000
 
 
 class FaqAnswers(BaseModel):
@@ -42,13 +45,32 @@ class AgentMeta(BaseModel):
 
 class ChatMessage(BaseModel):
     role: str
-    content: str = Field(..., max_length=8000)
+    content: str = Field(..., max_length=MAX_CHAT_MESSAGE_CHARS)
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def coerce_content(cls, value: object) -> object:
+        if value is None:
+            return ""
+        if not isinstance(value, str):
+            value = str(value)
+        if len(value) > MAX_CHAT_MESSAGE_CHARS:
+            return value[:MAX_CHAT_MESSAGE_CHARS]
+        return value
 
 
 class ChatRequest(BaseModel):
     agent_id: str
     message: str = Field(..., min_length=1, max_length=4000)
-    history: list[ChatMessage] = Field(default_factory=list, max_length=40)
+    history: list[ChatMessage] = Field(default_factory=list, max_length=MAX_CHAT_HISTORY)
+
+    @field_validator("history", mode="before")
+    @classmethod
+    def cap_history(cls, value: object) -> object:
+        """Keep the most recent turns instead of 422'ing a long recruiter thread."""
+        if isinstance(value, list) and len(value) > MAX_CHAT_HISTORY:
+            return value[-MAX_CHAT_HISTORY:]
+        return value
 
 
 class ChatResponse(BaseModel):

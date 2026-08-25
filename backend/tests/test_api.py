@@ -76,12 +76,22 @@ def test_chat_unknown_agent_returns_404(client):
     assert resp.status_code == 404
 
 
-def test_chat_rejects_oversized_history(client):
+def test_chat_truncates_oversized_history(client, fake_llm):
     meta = _create_agent(client)
     history = [{"role": "user", "content": "hi"} for _ in range(41)]
     resp = client.post(
         "/api/chat",
         json={"agent_id": meta["id"], "message": "hello", "history": history},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["answer"]
+
+
+def test_chat_rejects_empty_message(client):
+    meta = _create_agent(client)
+    resp = client.post(
+        "/api/chat",
+        json={"agent_id": meta["id"], "message": "", "history": []},
     )
     assert resp.status_code == 422
 
