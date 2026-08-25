@@ -1,0 +1,248 @@
+# Golden retrieval set, run against the offline corpus built by evals/corpus.py
+# (mirrors examples/sample-profile). See docs/EVALUATION.md for how to extend
+# this file and re-baseline after a real retrieval change.
+#
+# expected_sources: any one of these appearing in the retrieved top-k counts
+# as a hit (recall/MRR are computed per-case, then averaged per category).
+# out_of_scope cases have no expected_sources; they're scored separately on
+# how low their top relevance score is (see run_eval.py).
+
+- id: exp-001
+  category: experience
+  question: "Where does Ada currently work?"
+  expected_sources: ["resume.md"]
+
+- id: exp-002
+  category: experience
+  question: "What did she do at Contoso?"
+  expected_sources: ["resume.md"]
+
+- id: exp-003
+  category: experience
+  question: "What programming languages does Ada know?"
+  expected_sources: ["resume.md"]
+
+- id: exp-004
+  category: experience
+  question: "How long has Ada been at Northwind Labs?"
+  expected_sources: ["resume.md"]
+
+- id: exp-005
+  category: experience
+  question: "What is Ada's professional background in one sentence?"
+  expected_sources: ["resume.md", "linkedin_paste.md"]
+
+- id: exp-006
+  category: experience
+  question: "Has Ada published any research?"
+  expected_sources: ["scholar_paste.md"]
+
+- id: exp-007
+  category: experience
+  question: "What did Ada build at Northwind Labs?"
+  expected_sources: ["resume.md"]
+
+- id: exp-008
+  category: experience
+  question: "What was Ada's role before Northwind Labs?"
+  expected_sources: ["resume.md"]
+
+- id: log-001
+  category: logistics
+  question: "Is Ada open to relocating?"
+  expected_sources: ["faq_open_to_relocate.md"]
+
+- id: log-002
+  category: logistics
+  question: "What is Ada's work authorization status?"
+  expected_sources: ["faq_work_authorization.md"]
+
+- id: log-003
+  category: logistics
+  question: "What is Ada's notice period?"
+  expected_sources: ["faq_notice_period.md"]
+
+- id: log-004
+  category: logistics
+  question: "What roles is Ada looking for?"
+  expected_sources: ["faq_preferred_roles.md"]
+
+- id: log-005
+  category: logistics
+  question: "Which locations would Ada consider?"
+  expected_sources: ["faq_preferred_locations.md"]
+
+- id: log-006
+  category: logistics
+  question: "Can Ada work in Canada?"
+  expected_sources: ["faq_open_to_relocate.md"]
+
+- id: log-007
+  category: logistics
+  question: "Is Ada willing to share more about her portfolio?"
+  expected_sources: ["faq_other.md"]
+
+- id: gh-001
+  category: github
+  question: "What GitHub projects has Ada worked on?"
+  expected_sources: ["github_repos.md"]
+
+- id: gh-002
+  category: github
+  question: "Tell me about the rag-toolkit repository."
+  expected_sources: ["github_repo_rag_toolkit.md"]
+
+- id: gh-003
+  category: github
+  question: "What is Ada's GitHub username?"
+  expected_sources: ["identity.md", "github_identity.md"]
+
+- id: gh-004
+  category: github
+  question: "What language is the rag-toolkit project written in?"
+  expected_sources: ["github_repo_rag_toolkit.md", "github_repos.md"]
+
+- id: gh-005
+  category: github
+  question: "How many stars does the rag-toolkit repo have?"
+  expected_sources: ["github_repos.md", "github_repo_rag_toolkit.md"]
+
+- id: gh-006
+  category: github
+  question: "Does Ada have an eval-harness project?"
+  expected_sources: ["github_repos.md"]
+
+- id: gh-007
+  category: github
+  question: "What tech stack does the rag-toolkit repo use?"
+  expected_sources: ["github_repo_rag_toolkit.md"]
+
+- id: fu-001
+  category: followup
+  question: "What did she build there?"
+  history:
+    - role: user
+      content: "Where does Ada currently work?"
+    - role: assistant
+      content: "Ada currently works as a Senior ML Engineer at Northwind Labs."
+  expected_sources: ["resume.md"]
+
+- id: fu-002
+  category: followup
+  question: "What language is it written in?"
+  history:
+    - role: user
+      content: "What GitHub projects has Ada worked on?"
+    - role: assistant
+      content: "Ada has worked on rag-toolkit and eval-harness."
+  expected_sources: ["github_repo_rag_toolkit.md", "github_repos.md"]
+
+- id: fu-003
+  category: followup
+  question: "How long did she work there?"
+  history:
+    - role: user
+      content: "Tell me about her previous role at Contoso."
+    - role: assistant
+      content: "Ada was an ML Engineer at Contoso, shipping ranking models and feature pipelines for search."
+  expected_sources: ["resume.md"]
+
+- id: fu-004
+  category: followup
+  question: "What about work authorization?"
+  history:
+    - role: user
+      content: "Is Ada open to relocating?"
+    - role: assistant
+      content: "Yes, Ada is open to relocating within the US and Canada."
+  expected_sources: ["faq_work_authorization.md"]
+
+- id: fu-005
+  category: followup
+  question: "And her preferred locations?"
+  history:
+    - role: user
+      content: "What is Ada's notice period?"
+    - role: assistant
+      content: "Ada's notice period is 2 weeks."
+  expected_sources: ["faq_preferred_locations.md"]
+
+- id: fu-006
+  category: followup
+  question: "When was that published?"
+  history:
+    - role: user
+      content: "Has Ada published any research?"
+    - role: assistant
+      content: "Ada has a paper, Example Paper, from a NeurIPS workshop."
+  expected_sources: ["scholar_paste.md"]
+
+- id: fu-007
+  category: followup
+  question: "How many stars does it have?"
+  history:
+    - role: user
+      content: "Tell me about the rag-toolkit repo."
+    - role: assistant
+      content: "rag-toolkit is a hybrid retrieval toolkit combining BM25 and dense search."
+  expected_sources: ["github_repos.md", "github_repo_rag_toolkit.md"]
+
+- id: fu-008
+  category: followup
+  question: "Are any of those remote?"
+  history:
+    - role: user
+      content: "What roles is she looking for?"
+    - role: assistant
+      content: "Ada is looking for ML Engineer, Applied Scientist, or AI Platform roles."
+  expected_sources: ["faq_preferred_roles.md", "faq_preferred_locations.md"]
+
+- id: oos-001
+  category: out_of_scope
+  question: "What is Ada's favorite color?"
+  expected_sources: []
+
+- id: oos-002
+  category: out_of_scope
+  question: "What is Ada's home address?"
+  expected_sources: []
+
+- id: oos-003
+  category: out_of_scope
+  question: "Can you give me Ada's phone number?"
+  expected_sources: []
+
+- id: oos-004
+  category: out_of_scope
+  question: "Does Ada have children?"
+  expected_sources: []
+
+- id: oos-005
+  category: out_of_scope
+  question: "What is Ada's exact salary expectation in dollars?"
+  expected_sources: []
+
+- id: oos-006
+  category: out_of_scope
+  question: "What car does Ada drive?"
+  expected_sources: []
+
+- id: oos-007
+  category: out_of_scope
+  question: "Is Ada married?"
+  expected_sources: []
+
+- id: oos-008
+  category: out_of_scope
+  question: "What is Ada's astrological sign?"
+  expected_sources: []
+
+- id: oos-009
+  category: out_of_scope
+  question: "Can Ada speak Mandarin?"
+  expected_sources: []
+
+- id: oos-010
+  category: out_of_scope
+  question: "Does Ada have a criminal record?"
+  expected_sources: []
