@@ -18,7 +18,7 @@ def get_embedding_model() -> TextEmbedding:
     if "MiniLM" in model_name or model_name.startswith("sentence-transformers/"):
         model_name = "sentence-transformers/all-MiniLM-L6-v2"
     logger.info("Loading FastEmbed model %s", model_name)
-    return TextEmbedding(model_name=model_name)
+    return TextEmbedding(model_name=model_name, threads=settings.embedding_threads)
 
 
 def embed_texts(texts: list[str]) -> list[list[float]]:
