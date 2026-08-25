@@ -50,8 +50,12 @@ async def create_agent(
     faq: Annotated[str | None, Form()] = None,
     resume: UploadFile | None = File(default=None),
 ) -> AgentMeta:
+    display_name = display_name.strip()
+    if not display_name:
+        raise HTTPException(status_code=400, detail="display_name is required")
+
     fields = AgentCreateFields(
-        display_name=display_name.strip(),
+        display_name=display_name,
         headline=headline.strip(),
         linkedin_url=linkedin_url.strip(),
         linkedin_text=linkedin_text,
@@ -61,8 +65,6 @@ async def create_agent(
         blog_text=blog_text,
         faq=_parse_faq(faq),
     )
-    if not fields.display_name:
-        raise HTTPException(status_code=400, detail="display_name is required")
 
     resume_bytes: bytes | None = None
     resume_filename: str | None = None
