@@ -7,6 +7,8 @@ alwaysApply: true
 
 Open-source RAG system for conversational profile discovery. Self-host on Docker / Oracle Always Free + Cloudflare Tunnel. Candidates upload resume + paste LinkedIn/FAQ/etc., bring their own free LLM API key (NVIDIA NIM default), deploy once, share a public chat URL with recruiters. Recruiters never install anything.
 
+**Live demo:** https://chat.rdhumal.com/a/5d0805be2236 — production is Oracle Ampere + Cloudflare Tunnel. Deploy files live on **`main`** (not `deploy/oracle`).
+
 ## Stack
 
 - **Backend:** FastAPI in `backend/app/` — ingest, FastEmbed + Chroma, grounded chat
