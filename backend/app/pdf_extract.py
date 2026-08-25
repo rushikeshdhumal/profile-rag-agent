@@ -121,10 +121,7 @@ def _join_wrapped_lines(lines: list[str]) -> str:
     out = lines[0]
     for ln in lines[1:]:
         # If previous ends mid-sentence / mid-word-ish, join with space
-        if out.endswith(("-", "/")):
-            out = out[:-1] + ln
-        else:
-            out = out + " " + ln
+        out = out[:-1] + ln if out.endswith(("-", "/")) else out + " " + ln
     return out.strip()
 
 
