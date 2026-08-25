@@ -42,13 +42,13 @@ class AgentMeta(BaseModel):
 
 class ChatMessage(BaseModel):
     role: str
-    content: str
+    content: str = Field(..., max_length=8000)
 
 
 class ChatRequest(BaseModel):
     agent_id: str
     message: str = Field(..., min_length=1, max_length=4000)
-    history: list[ChatMessage] = Field(default_factory=list)
+    history: list[ChatMessage] = Field(default_factory=list, max_length=40)
 
 
 class ChatResponse(BaseModel):
