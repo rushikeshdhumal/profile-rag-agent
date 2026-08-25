@@ -90,13 +90,22 @@ def fetch_github_documents(username: str) -> list[tuple[str, str]]:
                 body = _fetch_raw_readme(client, username, name)
                 if not body:
                     continue
-                header = (
-                    f"# Repository: {name}\n\n"
-                    f"URL: {repo.get('html_url') or ''}\n"
-                    f"Language: {repo.get('language') or ''}\n"
-                    f"Stars: {repo.get('stargazers_count', 0)}\n"
-                    f"Description: {_truncate(repo.get('description') or '', REPO_DESC_MAX)}\n\n"
+                header_lines = [
+                    f"# Repository: {name}\n",
+                    f"URL: {repo.get('html_url') or ''}",
+                    f"Language: {repo.get('language') or ''}",
+                    f"Stars: {repo.get('stargazers_count', 0)}",
+                ]
+                updated = _iso_date(repo.get("updated_at"))
+                pushed = _iso_date(repo.get("pushed_at"))
+                if updated:
+                    header_lines.append(f"Updated: {updated}")
+                if pushed:
+                    header_lines.append(f"Pushed: {pushed}")
+                header_lines.append(
+                    f"Description: {_truncate(repo.get('description') or '', REPO_DESC_MAX)}\n"
                 )
+                header = "\n".join(header_lines) + "\n"
                 docs.append(
                     (f"github_repo_{safe}.md", header + body[:REPO_README_MAX])
                 )
@@ -110,6 +119,17 @@ def fetch_github_profile(username: str) -> str:
     """Backward-compatible single-string fetch (joined documents)."""
     docs = fetch_github_documents(username)
     return "\n\n".join(text for _, text in docs)
+
+
+def _iso_date(value: Any) -> str:
+    """Reduce a GitHub timestamp ("2026-08-20T12:00:00Z") to its date part.
+
+    Returns "" for missing/malformed input so callers can omit the field
+    rather than print a confusing empty date.
+    """
+    if not value or not isinstance(value, str):
+        return ""
+    return value[:10] if re.fullmatch(r"\d{4}-\d{2}-\d{2}T.*", value) else ""
 
 
 def _truncate(text: str, limit: int) -> str:
@@ -136,14 +156,23 @@ def _format_user(user: dict[str, Any]) -> str:
 
 
 def _format_repos(repos: list[dict[str, Any]]) -> str:
-    lines = ["# Recent public repositories"]
+    # Fetched with sort=updated (see fetch_github_documents), so this order
+    # is meaningful for "most recent project" questions -- state that plainly
+    # rather than relying on the model to infer list order as recency.
+    lines = ["# Recent public repositories (most recently updated first)"]
     for repo in repos:
         desc = _truncate(repo.get("description") or "", REPO_DESC_MAX)
         lang = repo.get("language") or ""
         stars = repo.get("stargazers_count", 0)
-        lines.append(
-            f"- {repo.get('name')}: {desc} (language={lang}, stars={stars}, url={repo.get('html_url')})"
-        )
+        fields = [f"language={lang}", f"stars={stars}"]
+        updated = _iso_date(repo.get("updated_at"))
+        pushed = _iso_date(repo.get("pushed_at"))
+        if updated:
+            fields.append(f"updated={updated}")
+        if pushed:
+            fields.append(f"pushed={pushed}")
+        fields.append(f"url={repo.get('html_url')}")
+        lines.append(f"- {repo.get('name')}: {desc} ({', '.join(fields)})")
     if len(lines) == 1:
         lines.append("- (no non-fork public repos found)")
     return "\n".join(lines)

@@ -28,9 +28,11 @@ Followers: 84
 Profile URL: https://github.com/{GITHUB_USERNAME}
 """
 
-_GITHUB_REPOS = """# Recent public repositories
-- rag-toolkit: A hybrid retrieval toolkit combining BM25 and dense search. (language=Python, stars=142, url=https://github.com/ada-example/rag-toolkit)
-- eval-harness: Golden-set evaluation harness for RAG pipelines. (language=Python, stars=37, url=https://github.com/ada-example/eval-harness)
+# rag-toolkit is given a strictly later "updated" than eval-harness so a
+# "most recent GitHub project" question has one unique correct answer.
+_GITHUB_REPOS = """# Recent public repositories (most recently updated first)
+- rag-toolkit: A hybrid retrieval toolkit combining BM25 and dense search. (language=Python, stars=142, updated=2026-08-18, pushed=2026-08-18, url=https://github.com/ada-example/rag-toolkit)
+- eval-harness: Golden-set evaluation harness for RAG pipelines. (language=Python, stars=37, updated=2026-01-02, pushed=2026-01-02, url=https://github.com/ada-example/eval-harness)
 """
 
 _GITHUB_REPO_RAGTOOLKIT = """# Repository: rag-toolkit
@@ -38,6 +40,8 @@ _GITHUB_REPO_RAGTOOLKIT = """# Repository: rag-toolkit
 URL: https://github.com/ada-example/rag-toolkit
 Language: Python
 Stars: 142
+Updated: 2026-08-18
+Pushed: 2026-08-18
 Description: A hybrid retrieval toolkit combining BM25 and dense search.
 
 ## What it does
