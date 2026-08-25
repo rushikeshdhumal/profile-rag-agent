@@ -10,7 +10,7 @@ alwaysApply: false
 
 - `config.py` — pydantic-settings; loads repo-root `.env`
 - `pdf_extract.py` — PDF text extraction + cleanup
-- `github_fetch.py` — `fetch_github_documents()` returns multiple `(filename, text)` docs (identity, repos, readme, top-5 repo READMEs); partial-failure tolerant
+- `github_fetch.py` — `fetch_github_documents()` returns multiple `(filename, text)` docs (identity, repos, readme, top-5 repo READMEs); partial-failure tolerant; repo list/README headers carry `updated`/`pushed` ISO dates (`_iso_date`) and the repo list heading states it is most-recently-updated-first, so "most recent project" questions have something to ground on
 - `ingest.py` — corpus build + markdown-aware chunking (`CHUNK_SIZE=900`, overlap `150`, no hard truncation); heading-breadcrumb prefix per chunk; `source_type`/`heading`/`char_start` metadata
 - `vectorstore.py` — Chroma per agent (`PersistentClient` cached by resolved path); real `where` metadata filters (no Python-side scans); `replace_collection()` does an embed-into-temp-then-swap reindex
 - `bm25.py` — per-agent BM25 lexical index (`rank_bm25`), cached, invalidated by `ingest.index_corpus`
@@ -37,11 +37,12 @@ alwaysApply: false
 - The old regex intent rules (experience/logistics/GitHub) are now a **soft RRF prior** (`WEIGHT_INTENT`), not a hard chunk injection — a miscategorized query degrades gracefully instead of losing content. Do not reintroduce hard injection.
 - Follow-up questions get condensed to a standalone query first (`rag._condense_query`, heuristically triggered by `_looks_context_dependent`) so pronoun/short follow-ups actually retrieve something
 - The relevance gate (`rag._apply_relevance_gate`) filters chunks below `RELEVANCE_GATE_SCORE` using the reranker's score, falling back to the top few pre-gate chunks rather than hard-refusing outright — the grounded system prompt is still the final refusal mechanism
-- System prompt: answer only from context; cite project names from context only
+- System prompt: answer only from context; cite project names from context only; the prompt also allows computing tenure/recency directly from dated lines already in context (years-of-experience, "most recent project") without inventing missing dates
+- `rag.answer_question` logs `chat_context agent=… query=… sources=… scores=…` after the relevance gate — source names and scores only, never chunk text (resumes carry PII) — use this to debug refusals without a UI
 
 ## When changing embeddings or chunking
 
-Tell the user to **recreate or reindex** existing agents; old Chroma collections will be stale. Then run `python evals/run_eval.py --update` and commit the new baseline — see `docs/EVALUATION.md`.
+Tell the user to **recreate or reindex** existing agents; old Chroma collections will be stale. Then run `python evals/run_eval.py --update` and commit the new baseline — see `docs/EVALUATION.md`. The same applies to `github_fetch.py` format changes (e.g. adding dates) — existing agents' `github_*.md` chunks were indexed with the old text and need a reindex to pick up the new fields.
 
 ## Testing
 
