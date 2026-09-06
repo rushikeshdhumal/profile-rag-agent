@@ -60,20 +60,20 @@ async def request_context_middleware(
     start = time.perf_counter()
     try:
         response = await call_next(request)
+
+        elapsed_ms = (time.perf_counter() - start) * 1000
+        response.headers["X-Request-Id"] = req_id
+
+        path = request.url.path
+        _request_counts[(request.method, path, response.status_code)] += 1
+        _request_latency_ms_sum[(request.method, path)] += elapsed_ms
+
+        logging.getLogger("app.request").info(
+            "%s %s -> %s (%.1fms)", request.method, path, response.status_code, elapsed_ms
+        )
+        return response
     finally:
         request_id_ctx.reset(token)
-
-    elapsed_ms = (time.perf_counter() - start) * 1000
-    response.headers["X-Request-Id"] = req_id
-
-    path = request.url.path
-    _request_counts[(request.method, path, response.status_code)] += 1
-    _request_latency_ms_sum[(request.method, path)] += elapsed_ms
-
-    logging.getLogger("app.request").info(
-        "%s %s -> %s (%.1fms)", request.method, path, response.status_code, elapsed_ms
-    )
-    return response
 
 
 def render_prometheus_text() -> str:
