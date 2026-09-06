@@ -14,7 +14,6 @@ Usage:
 from __future__ import annotations
 
 import argparse
-import contextlib
 import gc
 import json
 import os
@@ -48,6 +47,11 @@ def _setup_eval_agent(data_dir: Path) -> str:
     # multi-threaded reductions, which can otherwise flip near-tied ANN ranks
     # on a small corpus and make the baseline comparison flaky.
     os.environ["EMBEDDING_THREADS"] = "1"
+    # Eval is offline: never call NVIDIA/Groq. A local `.env` LLM_API_KEY would
+    # otherwise rewrite follow-up questions and produce a baseline CI cannot
+    # reproduce (followup.mrr_at_10 1.0 locally vs ~0.82 on GitHub Actions).
+    os.environ["LLM_API_KEY"] = ""
+    os.environ["QUERY_REWRITE_ENABLED"] = "false"
 
     from app.config import get_settings
 
@@ -77,16 +81,11 @@ def _load_dataset() -> list[dict[str, Any]]:
 
 
 def _run_case(agent_id: str, case: dict[str, Any]) -> dict[str, Any]:
-    from app.rag import _condense_query, _looks_context_dependent
     from app.retrieval import retrieve
-    from app.schemas import ChatMessage
 
-    history = [ChatMessage(**h) for h in case.get("history", [])]
+    # Follow-up cases retrieve the written question as-is. Production may LLM-
+    # condense first, but that needs an API key and is not part of this gate.
     query = case["question"]
-    if history and _looks_context_dependent(query, history):
-        with contextlib.suppress(Exception):
-            query = _condense_query(query, history)
-
     chunks = retrieve(agent_id, query, k=10, candidate_k=30)
     sources = [c.get("source") for c in chunks]
     top_score = 0.0

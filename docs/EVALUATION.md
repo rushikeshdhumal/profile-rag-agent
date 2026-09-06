@@ -53,9 +53,13 @@ Add cases to `evals/dataset.yaml`:
   expected_sources: ["resume.md"]
 ```
 
-For multi-turn cases (`category: followup`), include a `history` list; the
-runner applies the same query-condensation heuristic `app.rag` uses before
-retrieving. For `out_of_scope` cases, leave `expected_sources: []`.
+For multi-turn cases (`category: followup`), include a `history` list for
+documentation; the runner **does not** call the LLM to condense the follow-up.
+It retrieves on the written question as-is. That keeps the gate offline and
+reproducible: a developer `.env` with `LLM_API_KEY` must not change
+`evals/baseline.json` relative to GitHub Actions (which has no key). Production
+chat still condenses when `QUERY_REWRITE_ENABLED=true`. For `out_of_scope`
+cases, leave `expected_sources: []`.
 
 After adding real content to `evals/corpus.py` or new questions, re-baseline
 with `--update` and commit the new `evals/baseline.json` alongside the
@@ -82,6 +86,9 @@ change, which would otherwise make the CI gate flaky. Two mitigations:
 
 - `run_eval.py` sets `EMBEDDING_THREADS=1` (see `app.config.embedding_threads`)
   so the embedding/reranker ONNX sessions run single-threaded.
+- `run_eval.py` also clears `LLM_API_KEY` and sets `QUERY_REWRITE_ENABLED=false`
+  so follow-up scores cannot be inflated by a local NVIDIA/Groq rewrite that
+  CI cannot run.
 - Chroma collections are created with a generous `hnsw:search_ef` (200) —
   cheap for the few-hundred-chunk corpora this app actually handles, and
   large enough relative to corpus size that HNSW returns the true top-k

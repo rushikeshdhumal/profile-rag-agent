@@ -20,7 +20,7 @@
   "followup": {
     "recall_at_5": 1.0,
     "recall_at_10": 1.0,
-    "mrr_at_10": 1.0,
+    "mrr_at_10": 0.8229166666666666,
     "n": 8
   },
   "out_of_scope": {
