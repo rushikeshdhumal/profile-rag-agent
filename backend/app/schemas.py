@@ -68,6 +68,8 @@ class ChatRequest(BaseModel):
     @classmethod
     def cap_history(cls, value: object) -> object:
         """Keep the most recent turns instead of 422'ing a long recruiter thread."""
+        if value is None:
+            return []
         if isinstance(value, list) and len(value) > MAX_CHAT_HISTORY:
             return value[-MAX_CHAT_HISTORY:]
         return value
