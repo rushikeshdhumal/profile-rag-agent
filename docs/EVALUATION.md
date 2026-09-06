@@ -27,7 +27,7 @@ see the numbers move, decide.
      isn't confidently retrieving anything for a question the profile can't
      answer, which is what lets the grounded system prompt refuse cleanly.
 4. Compares against `evals/baseline.json` and exits non-zero on regression
-   (recall/MRR dropping more than 5 points, or the out-of-scope score rising
+   (recall/MRR dropping more than 8 points, or the out-of-scope score rising
    more than 1.5 logits). CI runs this on every PR.
 
 No LLM call is involved (no `LLM_API_KEY` needed) — only the FastEmbed
