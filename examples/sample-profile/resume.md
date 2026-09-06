@@ -13,3 +13,7 @@ Machine learning engineer focused on retrieval systems, evaluation, and producti
 
 ## Skills
 Python, PyTorch, FastAPI, vector search, evaluation harnesses, Docker.
+
+## Education
+### M.Sc. Computer Science — Example University (2017–2019)
+### B.Sc. Computer Science — Example University (2013–2017)

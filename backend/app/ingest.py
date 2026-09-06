@@ -5,17 +5,20 @@ import logging
 import re
 from typing import Any
 
+from app.bm25 import invalidate_bm25_index
 from app.github_fetch import fetch_github_documents
 from app.pdf_extract import MIN_RESUME_CHARS, extract_pdf_text
 from app.schemas import AgentCreateFields, FaqAnswers
 from app.store import write_source_file
-from app.vectorstore import upsert_chunks
+from app.vectorstore import replace_collection
 
 logger = logging.getLogger(__name__)
 
-CHUNK_SIZE = 500
-CHUNK_OVERLAP = 80
-MAX_CHUNK_CHARS = 500
+# Chunks carry full text (no hard truncation) split near CHUNK_SIZE with overlap
+CHUNK_SIZE = 900
+CHUNK_OVERLAP = 150
+
+_HEADING_LINE_RE = re.compile(r"^(#{1,6})\s+(.*)$")
 
 
 def source_type_for(filename: str) -> str:
@@ -37,24 +40,71 @@ def source_type_for(filename: str) -> str:
     return "other"
 
 
-def _split_markdown_blocks(text: str) -> list[str]:
-    """Split on headings and blank lines before hard character cuts."""
+def _split_markdown_blocks(text: str) -> list[tuple[str, str]]:
+    """Split into (heading breadcrumb, paragraph) pairs using a heading stack.
+
+    The breadcrumb (e.g. "Experience > Senior ML Engineer") is later prefixed
+    onto each chunk's text so the embedding carries section context even after
+    the paragraph is separated from its heading.
+    """
     text = re.sub(r"\r\n?", "\n", text).strip()
     if not text:
         return []
-    # Keep heading lines attached to following content when possible
-    parts = re.split(r"(?=\n#{1,6}\s)", text)
-    blocks: list[str] = []
-    for part in parts:
-        part = part.strip()
-        if not part:
+
+    stack: list[tuple[int, str]] = []
+    grouped: list[tuple[str, str]] = []
+    buf: list[str] = []
+
+    def flush() -> None:
+        content = "\n".join(buf).strip()
+        buf.clear()
+        if content:
+            breadcrumb = " > ".join(title for _, title in stack)
+            grouped.append((breadcrumb, content))
+
+    for line in text.split("\n"):
+        heading = _HEADING_LINE_RE.match(line.strip())
+        if heading:
+            flush()
+            level = len(heading.group(1))
+            title = heading.group(2).strip()
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            if title:
+                stack.append((level, title))
             continue
-        paragraphs = re.split(r"\n\s*\n", part)
-        for para in paragraphs:
+        buf.append(line)
+    flush()
+
+    blocks: list[tuple[str, str]] = []
+    for breadcrumb, group in grouped:
+        for para in re.split(r"\n\s*\n", group):
             para = para.strip()
             if para:
-                blocks.append(para)
-    return blocks or [text]
+                blocks.append((breadcrumb, para))
+    return blocks or [("", text)]
+
+
+def _slide_window(block: str, size: int, overlap: int) -> list[str]:
+    """Split a block into overlapping pieces near `size` chars, never truncating."""
+    if len(block) <= size:
+        return [block]
+    pieces: list[str] = []
+    start = 0
+    while start < len(block):
+        end = min(len(block), start + size)
+        if end < len(block):
+            window = block[start:end]
+            br = max(window.rfind("\n"), window.rfind(" "))
+            if br > size // 3:
+                end = start + br
+        piece = block[start:end].strip()
+        if piece:
+            pieces.append(piece)
+        if end >= len(block):
+            break
+        start = max(0, end - overlap)
+    return pieces
 
 
 def chunk_text(text: str, source: str) -> list[dict[str, Any]]:
@@ -65,46 +115,27 @@ def chunk_text(text: str, source: str) -> list[dict[str, Any]]:
     blocks = _split_markdown_blocks(text)
     chunks: list[dict[str, Any]] = []
     idx = 0
+    cursor = 0  # monotonic ordinal offset across this source's chunks (not exact byte offset)
     source_type = source_type_for(source)
 
-    for block in blocks:
-        if len(block) <= CHUNK_SIZE:
-            piece = block[:MAX_CHUNK_CHARS].strip()
-            if piece:
-                chunks.append(
-                    {
-                        "text": piece,
-                        "source": source,
-                        "source_type": source_type,
-                        "index": idx,
-                    }
-                )
-                idx += 1
-            continue
-
-        start = 0
-        while start < len(block):
-            end = min(len(block), start + CHUNK_SIZE)
-            # Prefer breaking at whitespace near the end
-            if end < len(block):
-                window = block[start:end]
-                br = max(window.rfind("\n"), window.rfind(" "))
-                if br > CHUNK_SIZE // 3:
-                    end = start + br
-            piece = block[start:end].strip()[:MAX_CHUNK_CHARS]
-            if piece:
-                chunks.append(
-                    {
-                        "text": piece,
-                        "source": source,
-                        "source_type": source_type,
-                        "index": idx,
-                    }
-                )
-                idx += 1
-            if end >= len(block):
-                break
-            start = max(0, end - CHUNK_OVERLAP)
+    for breadcrumb, block in blocks:
+        for piece in _slide_window(block, CHUNK_SIZE, CHUNK_OVERLAP):
+            piece = piece.strip()
+            if not piece:
+                continue
+            chunk_text_out = f"{breadcrumb}\n\n{piece}" if breadcrumb else piece
+            chunks.append(
+                {
+                    "text": chunk_text_out,
+                    "source": source,
+                    "source_type": source_type,
+                    "index": idx,
+                    "heading": breadcrumb,
+                    "char_start": cursor,
+                }
+            )
+            idx += 1
+            cursor += len(piece)
 
     return chunks
 
@@ -220,7 +251,11 @@ def index_corpus(agent_id: str, corpus: list[tuple[str, str]]) -> int:
                     "source": source,
                     "source_type": chunk["source_type"],
                     "index": chunk["index"],
+                    "heading": chunk.get("heading", ""),
+                    "char_start": chunk.get("char_start", 0),
                 }
             )
 
-    return upsert_chunks(agent_id, ids, documents, metadatas)
+    count = replace_collection(agent_id, ids, documents, metadatas)
+    invalidate_bm25_index(agent_id)
+    return count

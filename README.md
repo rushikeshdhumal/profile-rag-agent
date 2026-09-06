@@ -8,11 +8,13 @@ Candidates ingest a resume, pasted LinkedIn/FAQ text, GitHub, and notes into a g
 
 ## Features
 
-- **Grounded RAG chat** — retrieval-augmented answers with source-aware boosting (resume, FAQ, GitHub)
+- **Hybrid grounded RAG chat** — dense (Chroma) + BM25 lexical search, fused with reciprocal rank fusion, reranked by a CPU cross-encoder, with follow-up query condensation for multi-turn chat
 - **Multi-source ingest** — PDF/Markdown resume, pasted LinkedIn & Scholar text, FAQ fields, blog notes, public GitHub
-- **Local embeddings** — FastEmbed ONNX (`all-MiniLM-L6-v2`); no GPU or PyTorch required
+- **Local embeddings** — FastEmbed ONNX (`all-MiniLM-L6-v2`) + CPU cross-encoder reranker (`ms-marco-MiniLM-L-6-v2`); no GPU or PyTorch required
 - **BYO LLM** — OpenAI-compatible clients for NVIDIA NIM, Groq, or Ollama
 - **Owner-gated builder** — `OWNER_SECRET` protects create/reindex; public chat is shareable
+- **Measured, not vibes-tuned** — a golden-set retrieval eval (`evals/`) gates recall/MRR regressions in CI; see [docs/EVALUATION.md](docs/EVALUATION.md)
+- **Hardened for public chat** — per-client + per-agent rate limiting, request-ID structured logs, safe (non-blanking) reindex, path-traversal-safe static serving
 - **Self-host deploy** — single Docker image; Oracle Always Free + Cloudflare Tunnel recommended for a public HTTPS URL
 
 ## Stack
@@ -36,11 +38,12 @@ Candidates ingest a resume, pasted LinkedIn/FAQ text, GitHub, and notes into a g
                │                              │
                ▼                              ▼
 ┌──────────────────────────┐    ┌─────────────────────────────┐
-│  Ingest pipeline         │    │  Chat / RAG                 │
-│  · PDF → text (PyMuPDF)  │    │  · query → embed            │
-│  · GitHub API (split docs)│   │  · Chroma retrieval + boost │
-│  · FAQ / paste sources   │    │  · grounded system prompt   │
-│  · markdown-aware chunks │    │  · LLM (NVIDIA/Groq/Ollama) │
+│  Ingest pipeline         │    │  Chat / hybrid RAG          │
+│  · PDF → text (PyMuPDF)  │    │  · rate limit → condense    │
+│  · GitHub API (split docs)│   │  · dense + BM25 + intent    │
+│  · FAQ / paste sources   │    │  · RRF fuse → CPU rerank    │
+│  · markdown-aware chunks │    │  · grounded system prompt   │
+│  · atomic reindex swap   │    │  · LLM (NVIDIA/Groq/Ollama) │
 └──────────────┬───────────┘    └──────────────▲──────────────┘
                │                               │
                ▼                               │
@@ -52,7 +55,7 @@ Candidates ingest a resume, pasted LinkedIn/FAQ text, GitHub, and notes into a g
 └──────────────────────────┘
 ```
 
-**Request path (chat):** message → embed → Chroma top-k (distance cutoff ~0.88) → query-type boosts (experience → resume/LinkedIn; logistics → FAQ; projects → GitHub) → context budget → LLM → grounded reply.
+**Request path (chat):** rate limit (per-client + per-agent daily cap) → condense follow-up questions using recent history → dense (Chroma) + BM25 + intent-filtered dense queries → reciprocal rank fusion → CPU cross-encoder rerank → relevance gate → context budget → LLM → grounded reply. See [docs/EVALUATION.md](docs/EVALUATION.md) for how retrieval quality is measured.
 
 **Data layout:** each agent is a folder on disk — no paid database. The API serves the built frontend from `frontend/dist` in production.
 
@@ -187,13 +190,33 @@ LLM_MODEL=llama3.1
 4. “Are you open to relocate?” → should hit FAQ.
 5. “What is your favorite color?” → should refuse / say not in profile.
 
+## Testing & evaluation
+
+```bash
+cd backend
+pip install -r requirements-dev.txt
+cd ..
+ruff check backend evals scripts   # lint
+pytest -q                          # unit + API tests (isolated temp DATA_DIR, no LLM calls)
+python evals/run_eval.py           # retrieval golden-set eval (recall/MRR vs. baseline)
+```
+
+All three run in CI (`.github/workflows/ci.yml`) on every pull request, along
+with a Docker build check. The retrieval eval needs no `LLM_API_KEY` — only
+the embedding and reranker ONNX models, downloaded anonymously from Hugging
+Face. See [docs/EVALUATION.md](docs/EVALUATION.md) for what it measures and
+how to extend the golden set.
+
 ## Security
 
 - Never commit `.env`, Cloudflare tunnel tokens, or put `LLM_API_KEY` in the frontend.
 - On public VMs set `PUBLIC_CHAT_ONLY=true` (prod Compose sets this) so only owners with `OWNER_SECRET` can create/reindex.
 - Mutating routes require `X-Owner-Secret` when `OWNER_SECRET` is set. Use a strong secret; escape `$` as `$$` in Compose `.env` files.
+- Set `ALLOWED_ORIGINS` to your real chat domain(s) in production; the `*` default never combines with credentialed CORS.
+- `/api/chat` is rate-limited per client (in-process token bucket; reads `CF-Connecting-IP` behind the tunnel) plus a per-agent daily cap (`RATE_LIMIT_*`, `AGENT_DAILY_CHAT_LIMIT`) — tune these before publicizing a link.
 - Prefer Cloudflare Tunnel over exposing `0.0.0.0:7860` on the public internet (no ingress port needed).
 - Free NIM tiers are rate-limited; fine for personal recruiting traffic, not a public viral bot.
+- `/api/metrics` (basic request-count/latency counters) is owner-gated like the builder routes.
 
 ## Contributing
 

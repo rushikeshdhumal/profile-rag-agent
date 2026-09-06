@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+
 from fastapi import Header, HTTPException, status
 
 from app.config import get_settings

@@ -10,9 +10,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "backend"))
 
 from app.ingest import build_source_corpus, index_corpus  # noqa: E402
-from app.schemas import AgentCreateFields, FaqAnswers  # noqa: E402
+from app.schemas import (  # noqa: E402
+    AgentCreateFields,
+    AgentMeta,  # noqa: E402
+    FaqAnswers,
+)
 from app.store import create_agent_id, save_meta, utc_now  # noqa: E402
-from app.schemas import AgentMeta  # noqa: E402
 
 
 def main() -> None:
