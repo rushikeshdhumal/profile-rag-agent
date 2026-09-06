@@ -18,7 +18,7 @@ from app.config import get_settings
 from app.llm import llm_configured
 from app.observability import configure_logging, render_prometheus_text, request_context_middleware
 from app.routes import agents, chat
-from app.schemas import HealthResponse
+from app.schemas import MAX_CHAT_HISTORY, HealthResponse, PublicConfigResponse
 
 settings = get_settings()
 configure_logging(json_logs=settings.json_logs)
@@ -81,12 +81,13 @@ def metrics() -> PlainTextResponse:
     return PlainTextResponse(render_prometheus_text())
 
 
-@app.get("/api/config/public")
-def public_config() -> dict:
-    return {
-        "public_chat_only": settings.public_chat_only,
-        "owner_auth_required": owner_auth_required(),
-    }
+@app.get("/api/config/public", response_model=PublicConfigResponse)
+def public_config() -> PublicConfigResponse:
+    return PublicConfigResponse(
+        public_chat_only=settings.public_chat_only,
+        owner_auth_required=owner_auth_required(),
+        max_chat_history=MAX_CHAT_HISTORY,
+    )
 
 
 def _static_dir() -> Path | None:

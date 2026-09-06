@@ -36,6 +36,17 @@ def test_readiness_endpoint(client):
     assert resp.json()["status"] == "ready"
 
 
+def test_public_config_includes_max_chat_history(client):
+    from app.schemas import MAX_CHAT_HISTORY
+
+    resp = client.get("/api/config/public")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["max_chat_history"] == MAX_CHAT_HISTORY
+    assert "public_chat_only" in body
+    assert "owner_auth_required" in body
+
+
 def test_create_agent_and_fetch(client):
     meta = _create_agent(client)
     assert meta["display_name"] == "Test Candidate"

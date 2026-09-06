@@ -87,3 +87,9 @@ class HealthResponse(BaseModel):
     llm_configured: bool
     public_chat_only: bool
     owner_auth_required: bool
+
+
+class PublicConfigResponse(BaseModel):
+    public_chat_only: bool
+    owner_auth_required: bool
+    max_chat_history: int = MAX_CHAT_HISTORY
